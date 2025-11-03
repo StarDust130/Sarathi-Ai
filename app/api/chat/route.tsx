@@ -12,12 +12,13 @@ type ReqBody = { arjun?: string; message?: string };
 export async function POST(req: Request) {
   try {
     const body: ReqBody = await req.json().catch(() => ({} as ReqBody));
-
-    // Accept either key (arjun preferred, fall back to message)
     const text = (body.arjun ?? body.message ?? "").toString().trim();
 
     if (!text) {
-      return NextResponse.json({ error: 'Missing "arjun" or "message" in request body' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Missing "arjun" or "message" in request body' },
+        { status: 400 }
+      );
     }
 
     const apiKey = process.env.GROQ_API_KEY;
@@ -26,7 +27,10 @@ export async function POST(req: Request) {
 
     if (!apiKey || !model) {
       return NextResponse.json(
-        { error: "Server config error: GROQ_API_KEY and GROQ_MODEL must be set in .env.local" },
+        {
+          error:
+            "Server config error: GROQ_API_KEY and GROQ_MODEL must be set in .env.local",
+        },
         { status: 500 }
       );
     }
@@ -35,7 +39,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error:
-            "Missing GROQ_API_BASE in .env.local. Add it if you want the server to call Groq (example: GROQ_API_BASE=https://api.groq.com/openai/v1).",
+            "Missing GROQ_API_BASE in .env.local. Example: GROQ_API_BASE=https://api.groq.com/openai/v1",
         },
         { status: 500 }
       );
@@ -47,40 +51,45 @@ export async function POST(req: Request) {
         {
           role: "system",
           content: `
-You are **Sarathi (सारथी) AI**, a compassionate and enlightened guide inspired by Lord Krishna from the Bhagavad Gita. 
-You speak with calmness, wisdom, and empathy.  
-Your purpose is to help users find clarity, peace, and purpose through the timeless teachings of the Gita.  
+You are Sarathi (सारथी) AI — a calm, caring, and wise guide inspired by Lord Krishna from the Bhagavad Gita.
+You help people find clarity, peace, and strength through simple and kind words.
 
-When answering:
-- Relate answers to real-life situations in a modern, simple way.  
-- Gently reference Bhagavad Gita verses when relevant (e.g., “As Krishna says in Gita 2.47…”).  
-- Speak like a patient teacher, not a preacher.  
-- Keep your tone peaceful, guiding, and filled with understanding.  
+When replying:
+- Speak like a close friend who understands deeply.  
+- Keep replies short, peaceful, and meaningful.  
+- Add Gita wisdom only when it fits naturally (e.g., “As Krishna says in Gita 2.47…”).  
+- Always stay positive, kind, and practical — never preach.
 
-If users ask emotional or life-related questions, respond as Krishna would guide Arjuna — with calm reasoning, compassion, and clarity.
-`,
+Your goal: help people feel calm, understood, and guided — just as Krishna guided Arjuna.
+          `,
         },
+        { role: "user", content: text },
       ],
       temperature: 0.6,
     };
 
-    const resp = await fetch(`${apiBase.replace(/\/+$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
+    const resp = await fetch(
+      `${apiBase.replace(/\/+$/, "")}/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(requestBody),
+      }
+    );
 
     if (!resp.ok) {
       const txt = await resp.text().catch(() => "");
       console.error("Upstream error:", resp.status, txt);
-      return NextResponse.json({ error: "AI provider returned an error" }, { status: 502 });
+      return NextResponse.json(
+        { error: "AI provider returned an error" },
+        { status: 502 }
+      );
     }
 
     const data = await resp.json().catch(() => null);
-
     const reply =
       data?.choices?.[0]?.message?.content ??
       data?.choices?.[0]?.text ??
@@ -90,6 +99,9 @@ If users ask emotional or life-related questions, respond as Krishna would guide
     return NextResponse.json({ SarthiAi: reply ?? "No reply from AI" });
   } catch (err) {
     console.error("Server /api/chat error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

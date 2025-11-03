@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
-// Define the possible states of the AI
 type Status = "idle" | "recording" | "processing" | "speaking" | "error";
 
-// --- 1. SVG Icons ---
 const IconMic = () => (
   <svg
     width="48"
@@ -26,13 +25,7 @@ const IconMic = () => (
 );
 
 const IconStop = () => (
-  <svg
-    width="40"
-    height="40"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    xmlns="http://www.w3.org/2000/svg"
-  >
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
     <path d="M6 6H18V18H6V6Z" />
   </svg>
 );
@@ -54,8 +47,15 @@ const IconAlert = () => (
   </svg>
 );
 
-// --- 2. Main Page Component ---
+const IconBack = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="15 18 9 12 15 6" />
+    <line x1="21" y1="12" x2="9" y2="12" />
+  </svg>
+);
+
 export default function VoicePage() {
+  const router = useRouter();
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusLabel, setStatusLabel] = useState("Tap to Speak");
@@ -64,7 +64,6 @@ export default function VoicePage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
-  // Effect to update the status label
   useEffect(() => {
     switch (status) {
       case "idle":
@@ -85,7 +84,6 @@ export default function VoicePage() {
     }
   }, [status]);
 
-  // --- Stop any playing AI audio
   const stopAiPlayback = () => {
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
@@ -94,9 +92,14 @@ export default function VoicePage() {
     setStatus("idle");
   };
 
-  // --- 1. Start Recording ---
+  const handleBack = () => {
+    if (status === "speaking") stopAiPlayback();
+    if (status === "recording") mediaRecorderRef.current?.stop();
+    router.back();
+  };
+
   const startRecording = async () => {
-    setErrorMessage(""); // Clear old errors
+    setErrorMessage("");
     setStatus("recording");
 
     try {
@@ -116,14 +119,11 @@ export default function VoicePage() {
       mediaRecorderRef.current.start();
     } catch (err) {
       console.error("Microphone error:", err);
-      setErrorMessage(
-        "Microphone access denied. Please allow microphone permissions."
-      );
+      setErrorMessage("Microphone access denied. Please allow microphone permissions.");
       setStatus("error");
     }
   };
 
-  // --- 2. Stop Recording & Call API ---
   const stopRecordingAndProcess = async () => {
     setStatus("processing");
 
@@ -132,13 +132,10 @@ export default function VoicePage() {
         type: "audio/webm",
       });
 
-      // --- Error Handling: Check for empty audio (silent recording) ---
       if (audioBlob.size < 1500) {
         setErrorMessage("I didn't hear anything. Please try speaking again.");
         setStatus("error");
-        mediaRecorderRef.current.stream
-          .getTracks()
-          .forEach((track) => track.stop());
+        mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
         return;
       }
 
@@ -161,14 +158,12 @@ export default function VoicePage() {
 
         const result = await response.json();
 
-        // --- Error Handling: Check for API response ---
         if (!result.audioBase64) {
           setErrorMessage("The AI didn't provide an audio response.");
           setStatus("error");
           return;
         }
 
-        // --- Create and play the audio response ---
         const audioUrl = `data:${result.audioMimeType};base64,${result.audioBase64}`;
         const audio = new Audio(audioUrl);
         audioPlayerRef.current = audio;
@@ -177,7 +172,7 @@ export default function VoicePage() {
         audio.onended = () => setStatus("idle");
         audio.onpause = () => {
           if (status === "speaking") {
-            setStatus("idle"); // Reset to idle if AI was speaking and paused
+            setStatus("idle");
           }
         };
         audio.onerror = () => {
@@ -191,39 +186,33 @@ export default function VoicePage() {
         setErrorMessage("An error occurred. Please try again.");
         setStatus("error");
       } finally {
-        // Clean up media streams
         if (mediaRecorderRef.current && mediaRecorderRef.current.stream) {
-          mediaRecorderRef.current.stream
-            .getTracks()
-            .forEach((track) => track.stop());
+          mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
         }
       }
     }
   };
 
-  // --- 3. Main Orb Click Handler ---
   const handleOrbClick = () => {
     switch (status) {
       case "idle":
         startRecording();
         break;
       case "recording":
-        mediaRecorderRef.current?.stop(); // Triggers 'onstop' handler
+        mediaRecorderRef.current?.stop();
         break;
       case "processing":
-        // Do nothing while processing
         break;
       case "speaking":
-        stopAiPlayback(); // This is your "Stop AI" button
+        stopAiPlayback();
         break;
       case "error":
-        setStatus("idle"); // Click to clear error
+        setStatus("idle");
         setErrorMessage("");
         break;
     }
   };
 
-  // --- 4. Determine Orb State (Style & Animation) ---
   let orbBgClass = "bg-blue-500 hover:bg-blue-600";
   let orbShadowClass = "shadow-[12px_12px_0_#000]";
   let orbAnimate = {};
@@ -232,20 +221,20 @@ export default function VoicePage() {
   switch (status) {
     case "recording":
       orbBgClass = "bg-red-500";
-      orbShadowClass = "shadow-[12px_12px_0_#a10000]"; // Darker red shadow
-      orbAnimate = { scale: [1, 1.05, 1] }; // Pulse
+      orbShadowClass = "shadow-[12px_12px_0_#a10000]";
+      orbAnimate = { scale: [1, 1.05, 1] };
       break;
     case "processing":
       orbBgClass = "bg-yellow-400";
-      orbShadowClass = "shadow-[12px_12px_0_#a88c00]"; // Darker yellow
-      orbAnimate = { rotate: [0, 360] }; // Spin
-      orbIcon = null; // Hide icon while spinning
+      orbShadowClass = "shadow-[12px_12px_0_#a88c00]";
+      orbAnimate = { rotate: [0, 360] };
+      orbIcon = null;
       break;
     case "speaking":
       orbBgClass = "bg-green-500";
-      orbShadowClass = "shadow-[12px_12px_0_#006d00]"; // Darker green
-      orbAnimate = { scale: [1, 1.05, 1] }; // Pulse
-      orbIcon = <IconStop />; // Show stop icon
+      orbShadowClass = "shadow-[12px_12px_0_#006d00]";
+      orbAnimate = { scale: [1, 1.05, 1] };
+      orbIcon = <IconStop />;
       break;
     case "error":
       orbBgClass = "bg-gray-700";
@@ -256,14 +245,33 @@ export default function VoicePage() {
 
   return (
     <div className="flex min-h-screen w-full flex-col items-center bg-[#FDF4E3] font-sans text-black">
-      {/* --- Header --- */}
       <header className="w-full border-b-4 border-black bg-white p-4">
-        <h1 className="text-center text-3xl font-bold">Gita AI Mentor</h1>
+        <div className="mx-auto flex w-full max-w-4xl items-center justify-between">
+          <motion.button
+            onClick={handleBack}
+            className="flex items-center gap-2 rounded-full border-2 border-black bg-black px-4 py-2 text-sm font-semibold text-white shadow-[6px_6px_0_#000]"
+            initial={{ x: -30, opacity: 0, rotate: -10 }}
+            animate={{ x: 0, opacity: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 15 }}
+            whileHover={{ scale: 1.05, rotate: -2, y: -2 }}
+            whileTap={{ scale: 0.95, rotate: 2, y: 0 }}
+          >
+            <IconBack />
+            Back
+          </motion.button>
+          <motion.h1
+            className="text-center text-3xl font-bold"
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 200, damping: 18, delay: 0.1 }}
+          >
+            🪷 Sarathi AI Voice
+          </motion.h1>
+          <div className="w-[110px]" />
+        </div>
       </header>
 
-      {/* --- Main Content --- */}
       <main className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-        {/* --- Orb Button --- */}
         <motion.button
           onClick={handleOrbClick}
           disabled={status === "processing"}
@@ -279,11 +287,10 @@ export default function VoicePage() {
               : {}
           }
         >
-          {/* Icon with animation */}
           <AnimatePresence>
             {orbIcon && (
               <motion.div
-                key={status} // Change key to force re-animation
+                key={status}
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.5 }}
@@ -294,11 +301,10 @@ export default function VoicePage() {
           </AnimatePresence>
         </motion.button>
 
-        {/* --- Status Label --- */}
         <div className="h-10 w-full max-w-md pt-8">
           <AnimatePresence mode="wait">
             <motion.h2
-              key={statusLabel} // Animate when text changes
+              key={statusLabel}
               className="text-2xl font-bold"
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -310,7 +316,6 @@ export default function VoicePage() {
           </AnimatePresence>
         </div>
 
-        {/* --- Error Message Area --- */}
         <div className="h-16 w-full max-w-md pt-4">
           <AnimatePresence>
             {status === "error" && errorMessage && (
