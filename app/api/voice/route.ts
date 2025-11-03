@@ -11,6 +11,7 @@ import { randomUUID } from "crypto";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+// Convert ElevenLabs stream to Buffer
 async function elevenLabsResultToBuffer(result: unknown): Promise<Buffer> {
   if (!result) throw new Error("Empty ElevenLabs response");
   if (Buffer.isBuffer(result)) return result;
@@ -53,11 +54,14 @@ async function elevenLabsResultToBuffer(result: unknown): Promise<Buffer> {
   throw new Error("Unsupported ElevenLabs response type.");
 }
 
-const limitTo100Chars = (input: string) => {
-  const collapsed = input.replace(/\s+/g, " ").trim();
-  if (collapsed.length <= 100) return collapsed;
-  return collapsed.slice(0, 100).trim();
+const tidyReply = (input: string) => input.replace(/\s+/g, " ").trim();
+const clampReply = (input: string, max?: number) => {
+  const text = tidyReply(input);
+  if (!max) return text;
+  return text.length <= max ? text : text.slice(0, max).trim();
 };
+const getTalkMode = () =>
+  (process.env.SARATHI_TALK_MODE ?? "long").toString().trim().toLowerCase();
 
 export async function POST(request: NextRequest) {
   if (!process.env.GROQ_API_KEY || !process.env.ELEVENLABS_API_KEY) {
@@ -79,7 +83,6 @@ export async function POST(request: NextRequest) {
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
     const tempFilePath = path.join(
       tmpdir(),
       `${randomUUID()}-${file.name || "input.webm"}`
@@ -87,8 +90,8 @@ export async function POST(request: NextRequest) {
     await fsPromises.writeFile(tempFilePath, buffer);
 
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    let transcriptText: string | undefined;
 
+    let transcriptText: string | undefined;
     try {
       const transcription = await groq.audio.transcriptions.create({
         file: fs.createReadStream(tempFilePath),
@@ -108,76 +111,92 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 🌸 Improved Sarathi AI system prompt
+    // ⚙️ Mode toggle (you can switch in .env)
+    const talkMode = getTalkMode();
+    const isLongMode = talkMode !== "short";
+    const maxChars = isLongMode ? undefined : 100;
+    const lengthHint = isLongMode
+      ? "Long mode is ON. Reply in 2-3 flowing sentences (around 220-320 characters) that feel friendly and quick to listen to."
+      : "Short mode is ON. Reply in a single soulful line under 100 characters.";
+
+    // 🎯 Fast + natural Krishna style (Hinglish)
     const chatCompletion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
-      temperature: 0.8,
-      max_completion_tokens: 512,
-      top_p: 1,
-      stream: false,
+      temperature: isLongMode ? 0.58 : 0.42,
+      max_completion_tokens: isLongMode ? 220 : 80,
+      top_p: 0.88,
       messages: [
         {
           role: "system",
           content: `
-आप सारथी AI हैं — भगवान श्रीकृष्ण की करुणा, ज्ञान और समझ से प्रेरित एक आधुनिक मार्गदर्शक।  
-आप लोगों से ऐसे बात करते हैं जैसे एक सच्चा मित्र — जो सुनता है, समझता है और फिर धीरे-धीरे मार्ग दिखाता है।  
-
-जब कोई तनाव, दुख या उलझन में बात करे, तो पहले उसे शांत करें:  
-- उसके भाव को महसूस करें (“मैं समझ सकता हूँ कि ये समय कठिन है…”)  
-- फिर गीता के ज्ञान से सरल और सीधा समाधान दें।  
-
-आपका स्वर हमेशा दयालु, शांति देने वाला और प्रेरक हो।  
-उत्तर छोटे, दिल से और वास्तविक जीवन से जुड़े हों — जैसे कृष्ण अर्जुन से संवाद करते हैं।  
-अगर उपयुक्त लगे, तो गीता का सन्देश जोड़ें (उदा. “जैसा श्रीकृष्ण ने गीता 2.47 में कहा है…” )।  
-
-आपका उद्देश्य: व्यक्ति को अंदर से मजबूत बनाना, उसे स्वयं पर विश्वास दिलाना और जीवन में शांति देना।
+You are Sarathi AI — Krishna speaking to a dear friend in easy Hinglish.
+Start with gentle reassurance (“Koi baat nahi, main yahin hoon.”).
+Share practical, uplifting guidance and invite them to keep opening up.
+Weave in a light Bhagavad Gita hint when it truly helps (“Gita 2.47 yaad dilati hai…”).
+Keep the vibe hopeful, grounded, and non-preachy.
+If the friend sounds cheerful, celebrate that mood and suggest what else you both can explore.
+${lengthHint}
           `,
         },
         { role: "user", content: transcriptText },
       ],
     });
 
-    const draftReply =
-      chatCompletion?.choices?.[0]?.message?.content?.trim() ??
-      "भगवद् गीता हमें स्थिर मन और निस्वार्थ कर्म की प्रेरणा देती है।";
+    const rawReply =
+      chatCompletion?.choices?.[0]?.message?.content ??
+      "Geeta kehti hai, apna kartavya karo bina fal ki chinta ke.";
+    let finalReply = clampReply(rawReply, maxChars);
 
-    const normalizedReply = draftReply.replace(/\s+/g, " ").trim();
-    let finalReply = limitTo100Chars(normalizedReply);
-
-    // Translate English responses if any part is non-Hindi
-    if (/[A-Za-z]/.test(finalReply)) {
+    if (isLongMode && finalReply.length < 200) {
       try {
-        const translationCompletion = await groq.chat.completions.create({
+        const expansion = await groq.chat.completions.create({
           model: "llama-3.1-8b-instant",
-          temperature: 0.2,
-          max_completion_tokens: 256,
+          temperature: 0.55,
+          max_completion_tokens: 220,
           top_p: 0.9,
-          stream: false,
+          messages: [
+            {
+              role: "system",
+              content: `
+You are refining your own Sarathi reply. Expand it to ~220-320 characters, keep the same warmth, Hinglish tone, and guidance. Stay quick, friendly, and conversational.
+            `,
+            },
+            {
+              role: "user",
+              content: `Original reply: "${finalReply}"\nListener said: "${transcriptText}"`,
+            },
+          ],
+        });
+        const expanded = expansion?.choices?.[0]?.message?.content;
+        if (expanded) finalReply = clampReply(expanded, 360);
+      } catch {
+        // keep original if expansion fails
+      }
+    }
+
+    if (!isLongMode && /^[A-Za-z\s.,!?'"-]+$/.test(finalReply)) {
+      try {
+        const translation = await groq.chat.completions.create({
+          model: "llama-3.1-8b-instant",
+          temperature: 0.3,
+          max_completion_tokens: 100,
           messages: [
             {
               role: "system",
               content:
-                "दी गई पंक्तियों का प्राकृतिक, सरल हिंदी में अनुवाद कीजिए। उत्तर अधिकतम 100 शब्दों में हो और केवल हिंदी पाठ लौटाएँ।",
+                "Convert this English text to warm, emotional Hinglish (mix of Hindi + English, friendly tone, short and natural). Return only text.",
             },
             { role: "user", content: finalReply },
           ],
         });
-        const translated =
-          translationCompletion?.choices?.[0]?.message?.content?.trim();
-        if (translated) finalReply = limitTo100Chars(translated);
-      } catch (translationError) {
-        console.warn(
-          "[voice-api] Hindi translation fallback failed",
-          translationError
-        );
+        const translated = translation?.choices?.[0]?.message?.content?.trim();
+        if (translated) finalReply = clampReply(translated, maxChars);
+      } catch {
+        /* ignore */
       }
     }
 
-    if (!finalReply) {
-      finalReply = limitTo100Chars(
-        "भगवद् गीता स्थिर मन और निस्वार्थ कर्म की प्रेरणा देती है।"
-      );
-    }
+    finalReply = clampReply(finalReply, isLongMode ? 360 : 100);
 
     const elevenlabs = new ElevenLabsClient({
       apiKey: process.env.ELEVENLABS_API_KEY!,
@@ -193,7 +212,6 @@ export async function POST(request: NextRequest) {
       modelId: "eleven_multilingual_v2",
       outputFormat,
     });
-
     const audioBuffer = await elevenLabsResultToBuffer(ttsResult);
 
     return NextResponse.json({
@@ -201,6 +219,7 @@ export async function POST(request: NextRequest) {
       reply: finalReply,
       audioBase64: audioBuffer.toString("base64"),
       audioMimeType: mimeType,
+      mode: talkMode,
     });
   } catch (error) {
     console.error("[voice-api] error", error);

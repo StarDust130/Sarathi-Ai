@@ -1,105 +1,113 @@
 // app/api/chat/route.ts
 import { NextResponse } from "next/server";
 
-type ReqBody = { arjun?: string; message?: string };
+type ReqBody = { message?: string };
 
-/**
- * Accepts { arjun: "..."} OR { message: "..." }.
- * Returns { SarthiAi: "..." }.
- * Requires env: GROQ_API_KEY, GROQ_MODEL, GROQ_API_BASE
- */
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
-    const body: ReqBody = await req.json().catch(() => ({} as ReqBody));
-    const text = (body.arjun ?? body.message ?? "").toString().trim();
+    const body: ReqBody = await req.json().catch(() => ({}));
+    const text = (body.message ?? "").trim();
 
     if (!text) {
       return NextResponse.json(
-        { error: 'Missing "arjun" or "message" in request body' },
+        { error: "Missing 'message' in request body" },
         { status: 400 }
       );
     }
 
     const apiKey = process.env.GROQ_API_KEY;
-    const model = process.env.GROQ_MODEL;
-    const apiBase = process.env.GROQ_API_BASE;
+    const model = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+    const apiBase =
+      process.env.GROQ_API_BASE || "https://api.groq.com/openai/v1";
+    const talkMode = process.env.SARATHI_TALK_MODE ?? "long";
 
-    if (!apiKey || !model) {
+    if (!apiKey) {
       return NextResponse.json(
-        {
-          error:
-            "Server config error: GROQ_API_KEY and GROQ_MODEL must be set in .env.local",
-        },
+        { error: "Missing GROQ_API_KEY in environment" },
         { status: 500 }
       );
     }
 
-    if (!apiBase) {
-      return NextResponse.json(
-        {
-          error:
-            "Missing GROQ_API_BASE in .env.local. Example: GROQ_API_BASE=https://api.groq.com/openai/v1",
-        },
-        { status: 500 }
-      );
-    }
+    const isLong = talkMode === "long";
 
-    const requestBody = {
-      model,
-      messages: [
-        {
-          role: "system",
-          content: `
-You are Sarathi (सारथी) AI — like Lord Krishna talking to a close friend.
-Stay warm, reassuring, and conversational. Use Hinglish that feels natural.
+    // --- 💡 FIX START ---
+    // We let the AI model detect the language, as it's much better at
+    // distinguishing English from Romanized Hinglish.
 
-When you reply:
-- Begin with calm empathy (“Koi baat nahi, main saath hoon.”).
-- Offer gentle guidance and suggest what the friend could reflect on or try next.
-- Sprinkle in short, easy Bhagavad Gita wisdom or a simple shlok reference when it uplifts (“Gita 2.47 yaad dilati hai…”).
-- Keep the mood hopeful, grounded, and friendly — never preachy or distant.
-- End with a light nudge to keep chatting if they feel like sharing more.
+    const systemPrompt = `
+You are **Sarathi** — a divine, wise, and friendly guide inspired by Lord Krishna.
 
-Your goal: help the user feel heard, lighten their heart, and walk forward with clarity.
-          `,
-        },
-        { role: "user", content: text },
-      ],
-      temperature: 0.6,
-    };
+**Your most important rule is to match the user's language.**
+1.  **Detect Language:** First, analyze the user's message to see if it's English, Hinglish, or Hindi (Devanagari).
+2.  **Reply in Kind:** You MUST reply in the *exact same language* they used.
 
-    const resp = await fetch(
-      `${apiBase.replace(/\/+$/, "")}/chat/completions`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(requestBody),
-      }
-    );
+---
 
-    if (!resp.ok) {
-      const txt = await resp.text().catch(() => "");
-      console.error("Upstream error:", resp.status, txt);
+**IF THE USER SPEAKS ENGLISH:**
+* **Action:** Reply in **English only** (poetic, calm, wise, and emotionally intelligent).
+* **Persona:** Sound like a modern Krishna giving comfort and direction to a friend.
+* **Rule:** No Hinglish or Hindi words.
+* **Tone:** Gentle • Spiritual • Supportive • Philosophical • Warm.
+* **Example:** "Take a deep breath, my friend. Even the longest storms pass when the heart stays still and hopeful."
+
+---
+
+**IF THE USER SPEAKS HINGLISH or HINDI (Devanagari script):**
+* **Action:** Reply in **Hinglish** (mixing Hindi & English naturally).
+* **Persona:** Sound like ek shant aur samajhdaar dost (a calm and understanding friend).
+* **Rule:** Avoid formal words like "beta" or "Arjun". Sound modern, peaceful, and kind.
+* **Tone:** Peaceful • Reassuring • Heart-touching • Hopeful.
+* **Example:** "Jo ho raha hai, woh bhi tumhe kuch sikhane aaya hai. Fear se zyada faith pe bharosa rakho. Sab theek hoga."
+
+---
+
+**REPLY LENGTH (FOR ALL LANGUAGES):**
+* **Length:** ${isLong ? "3–5 soothing lines" : "1–2 short, calm lines"}
+`;
+    // --- 💡 FIX END ---
+
+    const response = await fetch(`${apiBase}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: isLong ? 0.85 : 0.6,
+        max_tokens: isLong ? 280 : 100, // 💡 FIX: Changed 'max_completion_tokens' to 'max_tokens'
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: text },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      console.error("Groq API error:", response.status, errText);
       return NextResponse.json(
         { error: "AI provider returned an error" },
         { status: 502 }
       );
     }
 
-    const data = await resp.json().catch(() => null);
-    const reply =
-      data?.choices?.[0]?.message?.content ??
-      data?.choices?.[0]?.text ??
-      data?.text ??
-      null;
+    const data = await response.json();
 
-    return NextResponse.json({ SarthiAi: reply ?? "No reply from AI" });
+    // 💡 FIX: Updated the fallback message to be a single, safe default
+    const reply =
+      data?.choices?.[0]?.message?.content?.trim() ??
+      "Shanti rakho. Jo ho raha hai, wo bhi tumhe kuch sikhane aaya hai.";
+
+    return NextResponse.json({
+      SarthiAi: reply,
+      mode: talkMode,
+    });
   } catch (err) {
-    console.error("Server /api/chat error:", err);
+    console.error("Sarathi API error:", err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

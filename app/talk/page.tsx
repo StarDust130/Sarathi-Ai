@@ -163,8 +163,13 @@ export default function VoicePage() {
     error: "bg-gradient-to-br from-gray-600 to-gray-800",
   };
 
-  const orbAnimate =
-    status === "processing" ? { rotate: [0, 360] } : { scale: [1, 1.05, 1] };
+  const orbVariants = {
+    idle: { scale: [1, 1.05, 1] },
+    recording: { scale: [1, 1.12, 1] },
+    processing: { rotate: [0, 360] },
+    speaking: { scale: [1, 1.08, 1] },
+    error: { scale: [1, 1, 1] },
+  };
 
   const orbIcon =
     status === "recording" || status === "speaking" ? (
@@ -205,25 +210,37 @@ export default function VoicePage() {
       <main className="flex flex-1 flex-col items-center justify-center space-y-6 p-6 text-center">
         <motion.div
           onClick={handleOrbClick}
-          animate={orbAnimate}
+          animate={orbVariants[status] ?? orbVariants.idle}
           transition={
             status === "processing"
-              ? { duration: 1.2, repeat: Infinity, ease: "linear" }
-              : { duration: 1, repeat: Infinity, ease: "easeInOut" }
+              ? { duration: 1.1, repeat: Infinity, ease: "linear" }
+              : { duration: 1.4, repeat: Infinity, ease: "easeInOut" }
           }
           className={`relative flex h-64 w-64 cursor-pointer items-center justify-center rounded-full border-4 border-black shadow-[10px_10px_0_#000] ${colors[status]}`}
         >
+          {/* --- FIX 1: ICON CONTAINER --- */}
+          {/* This div now counter-rotates the icon when the status is "processing" */}
           <motion.div
+            key={status} // Add key to force re-animation on status change
             initial={{ opacity: 0, scale: 0.7 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3 }}
+            animate={{
+              opacity: 1,
+              scale: 1,
+              rotate: status === "processing" ? [0, -360] : 0, // Counter-rotation
+            }}
+            transition={
+              status === "processing"
+                ? { duration: 1.1, repeat: Infinity, ease: "linear" } // Sync with parent
+                : { duration: 0.3, ease: "easeInOut" }
+            }
+            className="z-10" // Ensure icon is on top
           >
             {orbIcon}
           </motion.div>
 
           {/* Glow pulse effect */}
           <motion.div
-            className="absolute inset-0 rounded-full bg-white/20 blur-2xl"
+            className="absolute inset-0 rounded-full bg-white/20 blur-2xl z-0"
             animate={
               status === "recording" || status === "speaking"
                 ? { scale: [1, 1.15, 1], opacity: [0.4, 0.8, 0.4] }
@@ -231,6 +248,47 @@ export default function VoicePage() {
             }
             transition={{ duration: 1.5, repeat: Infinity }}
           />
+
+          {/* --- FIX 2: NEW ANIMATED WAVES --- */}
+          {(status === "recording" || status === "speaking") && (
+            <>
+              {/* Wave 1 */}
+              <motion.div
+                className={`absolute inset-0 rounded-full border-4 ${
+                  status === "recording"
+                    ? "border-rose-400/80"
+                    : "border-emerald-400/80"
+                } z-0`}
+                animate={{
+                  scale: [1, 1.5, 1.8],
+                  opacity: [0.7, 0.3, 0],
+                }}
+                transition={{
+                  duration: 2.2,
+                  repeat: Infinity,
+                  ease: "easeOut",
+                }}
+              />
+              {/* Wave 2 (staggered) */}
+              <motion.div
+                className={`absolute inset-0 rounded-full border-2 ${
+                  status === "recording"
+                    ? "border-rose-300/80"
+                    : "border-emerald-300/80"
+                } z-0`}
+                animate={{
+                  scale: [1, 1.4, 1.7],
+                  opacity: [0.6, 0.2, 0],
+                }}
+                transition={{
+                  duration: 2.2,
+                  repeat: Infinity,
+                  ease: "easeOut",
+                  delay: 0.7,
+                }}
+              />
+            </>
+          )}
         </motion.div>
 
         <AnimatePresence mode="wait">
