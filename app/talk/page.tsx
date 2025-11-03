@@ -5,6 +5,14 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
 type Status = "idle" | "recording" | "processing" | "speaking" | "error";
+type Petal = {
+  id: number;
+  left: number;
+  top: number;
+  size: number;
+  delay: number;
+  duration: number;
+};
 
 const IconMic = () => (
   <svg
@@ -67,6 +75,7 @@ export default function VoicePage() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusLabel, setStatusLabel] = useState("Tap to Speak");
+  const [petals, setPetals] = useState<Petal[]>([]);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -82,6 +91,19 @@ export default function VoicePage() {
     };
     setStatusLabel(labelMap[status]);
   }, [status]);
+
+  useEffect(() => {
+    setPetals(
+      Array.from({ length: 18 }).map((_, idx) => ({
+        id: idx,
+        left: Math.random() * 100,
+        top: -Math.random() * 140,
+        size: 22 + Math.random() * 26,
+        delay: Math.random() * 4,
+        duration: 12 + Math.random() * 9,
+      }))
+    );
+  }, []);
 
   const stopAiPlayback = () => {
     if (audioPlayerRef.current) {
@@ -163,6 +185,14 @@ export default function VoicePage() {
     error: "bg-gradient-to-br from-gray-600 to-gray-800",
   };
 
+  const statusDescriptions: Record<Status, string> = {
+    idle: "Tap the lotus orb to begin your guided exchange.",
+    recording: "Share your truth—Sarathi is listening with grace.",
+    processing: "Wisdom is distilling in the ether. Stay centered.",
+    speaking: "Receive the response carried on a calm current.",
+    error: "The link trembled—reset and invoke the voice again.",
+  };
+
   const orbVariants = {
     idle: { scale: [1, 1.05, 1] },
     recording: { scale: [1, 1.12, 1] },
@@ -181,7 +211,49 @@ export default function VoicePage() {
     );
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-between bg-[#FFF9F2] text-black font-sans">
+    <div className="relative flex min-h-screen flex-col items-center justify-between overflow-hidden bg-[#FFF9F2] font-sans text-black">
+      <motion.div
+        className="pointer-events-none absolute -top-48 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-[6rem] border-4 border-black bg-gradient-to-br from-[#FFB4BD] via-[#FFD3A4] to-[#FFF5DA] opacity-90 shadow-[18px_18px_0_#00000033]"
+        animate={{ rotate: [0, 6, -4, 0], y: [0, -18, 6, 0] }}
+        transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div
+        className="pointer-events-none absolute bottom-[-18rem] right-[-8rem] h-[36rem] w-[30rem] rounded-[5rem] border-4 border-black bg-gradient-to-tr from-[#A5B4FC] via-[#7DD3FC] to-[#F0ABFC] shadow-[20px_20px_0_#00000028]"
+        animate={{ rotate: [0, -5, 3, 0], y: [0, -24, 10, 0] }}
+        transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[1100px] w-[1100px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-[#fdd835]/40 via-[#ffd07f]/45 to-[#ffc8dd]/35 blur-[200px]"
+        animate={{ scale: [0.96, 1.08, 1], opacity: [0.45, 0.7, 0.5] }}
+        transition={{ duration: 18, repeat: Infinity, repeatType: "reverse" }}
+      />
+      {petals.map((petal) => (
+        <motion.span
+          key={petal.id}
+          className="absolute z-10 select-none text-3xl"
+          style={{
+            left: `${petal.left}%`,
+            top: `${petal.top}px`,
+            fontSize: `${petal.size}px`,
+          }}
+          initial={{ y: "-15vh", opacity: 0 }}
+          animate={{
+            y: "115vh",
+            opacity: [0.35, 0.65, 0.35],
+            rotate: [0, 12, -12, 0],
+          }}
+          transition={{
+            duration: petal.duration,
+            delay: petal.delay,
+            repeat: Infinity,
+            repeatType: "loop",
+            ease: "easeInOut",
+          }}
+        >
+          🪷
+        </motion.span>
+      ))}
+
       {/* Header */}
       <header className="w-full border-b-4 border-black bg-white p-4">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
@@ -207,7 +279,12 @@ export default function VoicePage() {
       </header>
 
       {/* Main */}
-      <main className="flex flex-1 flex-col items-center justify-center space-y-6 p-6 text-center">
+      <main className="relative z-20 flex flex-1 flex-col items-center justify-center space-y-8 p-6 text-center">
+        <motion.div
+          className="absolute inset-x-0 top-24 mx-auto h-[22rem] w-[22rem] rounded-full bg-gradient-to-br from-[#FFFBF5]/70 via-[#FFF5E4]/60 to-[#FFE3F4]/40 blur-3xl"
+          animate={{ scale: [0.9, 1.05, 0.95], opacity: [0.4, 0.55, 0.45] }}
+          transition={{ duration: 9, repeat: Infinity, repeatType: "mirror" }}
+        />
         <motion.div
           onClick={handleOrbClick}
           animate={orbVariants[status] ?? orbVariants.idle}
@@ -303,6 +380,16 @@ export default function VoicePage() {
             {statusLabel}
           </motion.h2>
         </AnimatePresence>
+
+        <motion.div
+          key={status}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="relative z-20 max-w-md rounded-3xl border-4 border-black bg-white/80 px-6 py-4 text-sm font-semibold text-[#5a4211] shadow-[10px_10px_0_#0000002c] backdrop-blur-sm"
+        >
+          {statusDescriptions[status]}
+        </motion.div>
 
         {status === "error" && errorMessage && (
           <motion.div

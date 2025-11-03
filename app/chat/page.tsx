@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { SendHorizonal } from "lucide-react";
+import Link from "next/link";
+import { Mic, SendHorizonal, ChevronDown, ChevronLeft } from "lucide-react";
 
 type ChatMessage = { role: "ai" | "user"; text: string };
 type FloatingFlower = {
@@ -13,6 +14,7 @@ type FloatingFlower = {
   duration: number;
   delay: number;
 };
+type ApiChatResponse = { SarthiAi?: unknown; error?: string };
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -24,8 +26,13 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
 
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Floating petals
   const flowers = useMemo<FloatingFlower[]>(
     () =>
       Array.from({ length: 14 }).map((_, id) => ({
@@ -39,9 +46,30 @@ export default function ChatPage() {
     []
   );
 
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  }, []);
+
+  // Always scroll on new message
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+    scrollToBottom("smooth");
+  }, [messages, isTyping, scrollToBottom]);
+
+  // Detect when user scrolls up
+  useEffect(() => {
+    const container = chatContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const distance =
+        container.scrollHeight - (container.scrollTop + container.clientHeight);
+      setShowScrollToBottom(distance > 200);
+    };
+
+    handleScroll();
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -60,12 +88,17 @@ export default function ChatPage() {
       });
 
       if (!resp.ok) {
-        const { error: apiError } = await resp.json().catch(() => ({}));
+        const { error: apiError } = (await resp
+          .json()
+          .catch(() => ({}))) as ApiChatResponse;
         throw new Error(apiError || "Failed to reach Sarathi.");
       }
 
-      const data = await resp.json();
-      const reply = (data?.SarthiAi ?? "No reply from AI.").toString();
+      const data = (await resp.json()) as ApiChatResponse;
+      const reply =
+        typeof data?.SarthiAi === "string"
+          ? data.SarthiAi
+          : String(data?.SarthiAi || "No reply from AI.");
       setMessages((prev) => [...prev, { role: "ai", text: reply }]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error.");
@@ -85,14 +118,22 @@ export default function ChatPage() {
     <main className="relative flex flex-col h-dvh bg-[#ECF1FF] text-slate-900 selection:bg-[#FFF5B8]/70 selection:text-slate-900">
       {/* Floating Background */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        {flowers.map((flower) => (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 opacity-80"
+          style={{
+            background:
+              "radial-gradient(1200px 600px at -10% -10%, rgba(255,212,129,0.22), transparent 60%), radial-gradient(900px 500px at 110% 10%, rgba(255,158,170,0.18), transparent 55%), radial-gradient(700px 400px at 50% 120%, rgba(162,170,255,0.22), transparent 50%)",
+          }}
+        />
+        {flowers.map((f) => (
           <motion.div
-            key={flower.id}
+            key={f.id}
             className="absolute select-none z-0"
             style={{
-              left: `${flower.left}%`,
-              top: `${flower.top}px`,
-              fontSize: `${flower.size}px`,
+              left: `${f.left}%`,
+              top: `${f.top}px`,
+              fontSize: `${f.size}px`,
             }}
             initial={{ y: "-10vh", opacity: 0 }}
             animate={{
@@ -101,10 +142,9 @@ export default function ChatPage() {
               rotate: [0, 12, -12, 0],
             }}
             transition={{
-              duration: flower.duration,
-              delay: flower.delay,
+              duration: f.duration,
+              delay: f.delay,
               repeat: Infinity,
-              repeatType: "loop",
             }}
           >
             🌸
@@ -113,53 +153,71 @@ export default function ChatPage() {
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-30 flex items-center justify-between mx-auto w-full max-w-5xl mt-3 rounded-[1.4rem] border-[3px] border-slate-900/70 bg-white/80 px-4 py-3 shadow-lg backdrop-blur-xl sm:mt-5 sm:rounded-[1.8rem] sm:px-5 sm:py-4 sm:shadow-[10px_10px_0px_rgba(15,23,42,0.18)]">
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <span className="rounded-full border-[3px] border-slate-900/55 bg-[#FFEFD2]/70 px-3 py-1 text-xs font-black uppercase tracking-[0.15em] text-slate-900 shadow-md sm:px-4 sm:text-sm">
+      <header className="sticky top-0 z-30 mx-auto mt-4 w-full max-w-5xl rounded-2xl border-[3px] border-slate-900/70 bg-white/85 px-4 py-3 shadow-lg backdrop-blur-xl sm:mt-6 sm:px-6 sm:py-5">
+        <div className="flex w-full items-center justify-between gap-3 sm:gap-5">
+          {/* Left section with Back button */}
+          <motion.div whileHover={{ scale: 1.06 }}>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 rounded-full border-[3px] border-slate-900/70 bg-gradient-to-r from-[#FFD481] via-[#FFB3C6] to-[#C2B5FF] px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.22em] text-slate-900 shadow-md transition sm:px-4 sm:py-2 sm:text-sm"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Back</span>
+            </Link>
+          </motion.div>
+
+          {/* Title */}
+          <span className="inline-flex items-center rounded-full border-[3px] border-slate-900/55 bg-[#FFEFD2]/75 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-slate-900 shadow-md sm:px-5 sm:text-sm">
             Sarathi Chat
           </span>
-          <p className="max-w-md rounded-full border-[3px] border-slate-900/45 bg-[#F5F7FF]/85 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-700 sm:px-4 sm:text-xs">
-            Mission: Guiding every seeker toward calm and clarity.
-          </p>
+
+          {/* Right section with Talk button */}
+          <motion.div whileHover={{ scale: 1.06 }}>
+            <Link
+              href="/talk"
+              className="inline-flex items-center gap-2 rounded-full border-[3px] border-slate-900/70 bg-gradient-to-r from-[#C2B5FF] via-[#FFB3C6] to-[#FFD481] px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.22em] text-slate-900 shadow-md transition sm:px-4 sm:py-2 sm:text-sm"
+            >
+              <Mic className="h-4 w-4" />
+              <span className="hidden sm:inline">Talk</span>
+            </Link>
+          </motion.div>
         </div>
       </header>
 
-      {/* Chat Area */}
-      <section className="flex-1 overflow-y-auto px-4 py-6 sm:px-10 sm:py-10 chat-scrollbar z-10">
+      {/* Chat */}
+      <section
+        ref={chatContainerRef}
+        className="flex-1 overflow-y-auto px-4 pb-24 pt-6 sm:px-10 sm:pb-28 sm:pt-10 chat-scrollbar z-10"
+      >
         <div className="mx-auto flex w-full max-w-3xl flex-col space-y-5 sm:space-y-6 bg-white/70 backdrop-blur-md p-4 rounded-3xl border-2 border-slate-900/30 shadow-md">
-          {messages.map((m, i) => (
-            <motion.div
-              key={`${m.role}-${i}`}
-              initial={
-                m.role === "ai"
-                  ? { opacity: 0, x: -20, scale: 0.95 }
-                  : { opacity: 0, x: 20, scale: 0.95 }
-              }
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className={`flex ${
-                m.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
-              <div
-                className={`max-w-[74%] rounded-[1.8rem] border-[3px] px-5 py-3 text-sm font-medium leading-relaxed shadow-[9px_9px_0px_rgba(15,23,42,0.18)] sm:px-7 sm:py-4 sm:text-base ${
-                  m.role === "user"
-                    ? "rounded-br-lg border-slate-900/75 bg-gradient-to-r from-[#FF9EAA] via-[#FFD481] to-[#FFF8D6] text-slate-900"
-                    : "rounded-bl-lg border-slate-900/65 bg-white/95 text-slate-800 backdrop-blur"
-                }`}
+          {messages.map((m, i) => {
+            const isAI = m.role === "ai";
+            const containsCode = /```/.test(m.text);
+            return (
+              <motion.div
+                key={`${m.role}-${i}`}
+                initial={isAI ? { opacity: 0, x: -20 } : { opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                className={`flex ${isAI ? "justify-start" : "justify-end"}`}
               >
-                {m.text}
-              </div>
-            </motion.div>
-          ))}
+                <div
+                  className={`max-w-[74%] rounded-[1.8rem] border-[3px] px-5 py-3 text-sm font-medium leading-relaxed sm:px-7 sm:py-4 sm:text-base ${
+                    isAI
+                      ? containsCode
+                        ? "border-slate-900/80 bg-[#1F1D3A] text-white font-mono whitespace-pre-wrap"
+                        : "border-slate-900/60 bg-gradient-to-r from-white via-[#F4F2FF]/95 to-[#FFE7F5]/90 text-slate-800"
+                      : "border-slate-900/75 bg-gradient-to-r from-[#FF9EAA] via-[#FFD481] to-[#FFF8D6] text-slate-900"
+                  } shadow-md`}
+                >
+                  {m.text}
+                </div>
+              </motion.div>
+            );
+          })}
 
           {isTyping && (
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              role="status"
-              className="inline-flex items-center gap-2 self-start rounded-full border-[3px] border-slate-900/55 bg-white/90 px-3.5 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.26em] text-slate-700 shadow-[6px_6px_0px_rgba(15,23,42,0.16)] sm:text-xs"
-            >
+            <div className="inline-flex items-center gap-2 self-start rounded-full border-[3px] border-slate-900/55 bg-white/90 px-3.5 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.26em] text-slate-700 shadow-md sm:text-xs">
               <span className="flex gap-1.5">
                 <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-[#FF9EAA]" />
                 <span
@@ -171,65 +229,76 @@ export default function ChatPage() {
                   style={{ animationDelay: "0.24s" }}
                 />
               </span>
-              Sarathi is weaving a reply
-            </motion.div>
+              Sarathi is typing...
+            </div>
           )}
 
           {error && (
-            <motion.div
-              initial={{ opacity: 0.6 }}
-              animate={{ opacity: 1 }}
-              className="flex items-center gap-2 self-start rounded-[1.4rem] border-[3px] border-rose-400/80 bg-rose-50/90 px-4 py-2 text-xs font-semibold text-rose-600 shadow-[6px_6px_0px_rgba(244,63,94,0.22)] sm:text-sm"
-            >
-              <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
-              {error}
-            </motion.div>
+            <div className="flex items-center gap-2 self-start rounded-2xl border-[3px] border-rose-400/80 bg-rose-50/90 px-4 py-2 text-xs font-semibold text-rose-600 shadow-md sm:text-sm">
+              ⚠️ {error}
+            </div>
           )}
 
           <div ref={messagesEndRef} />
         </div>
       </section>
 
+      {/* Scroll-to-bottom */}
+      {showScrollToBottom && (
+        <motion.button
+          onClick={() => scrollToBottom()}
+          className="
+      fixed 
+      bottom-24 sm:bottom-26
+      z-50 
+      inline-flex items-center gap-2
+      rounded-full border-[3px] border-slate-900/70 
+      bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-900 shadow-md
+      left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-12
+    "
+          whileHover={{ scale: 1.05, y: -2 }}
+          whileTap={{ scale: 0.93 }}
+        >
+          <ChevronDown className="h-4 w-4" />
+          <span className="hidden md:block">Latest</span>
+        </motion.button>
+      )}
+
       {/* Input */}
-      <footer className="sticky bottom-0 z-30 flex justify-center bg-[#ECF1FF]/90 backdrop-blur-md pb-4 pt-2 px-4 sm:px-8">
-        <div className="w-full max-w-3xl rounded-[1.4rem] border-[3px] border-slate-900/70 bg-white/95 px-3 py-2.5 shadow-lg sm:rounded-[1.6rem] sm:py-3 sm:shadow-[14px_14px_0px_rgba(15,23,42,0.22)]">
-          <div className="grid grid-cols-[1fr_auto] items-center gap-2 sm:gap-4">
+      <footer className="sticky bottom-0 z-40 flex justify-center bg-[#ECF1FF]/90 backdrop-blur-md pb-4 pt-3 px-4 sm:px-8">
+        <motion.div className="w-full max-w-3xl rounded-2xl border-[3px] border-slate-900/70 bg-white/90 px-3 py-2.5 shadow-md transition">
+          <div className="grid grid-cols-[1fr_auto] items-center gap-3">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSend()}
               placeholder="Share your thought..."
-              autoComplete="off"
               className="h-11 rounded-full bg-transparent px-4 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none sm:h-14 sm:text-base"
               disabled={isTyping}
             />
-            <motion.button
-              whileHover={{ scale: 1.06, rotate: 2 }}
-              whileTap={{ scale: 0.94 }}
+            <button
               onClick={handleSend}
               disabled={isTyping}
-              aria-label="Send message"
-              className="flex h-10 w-10 items-center justify-center rounded-full border-[3px] border-slate-900/70 bg-gradient-to-br from-[#FFD481] via-[#FFB3C6] to-[#C2B5FF] shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60 sm:h-12 sm:w-12"
+              className="flex h-10 w-10 items-center justify-center rounded-full border-[3px] border-slate-900/70 bg-gradient-to-br from-[#FFD481] via-[#FFB3C6] to-[#C2B5FF] shadow-md disabled:opacity-60 sm:h-12 sm:w-12"
             >
               <SendHorizonal className="h-5 w-5 text-slate-900" />
-            </motion.button>
+            </button>
           </div>
-          <p className="mt-2 text-center text-[0.58rem] font-semibold uppercase tracking-[0.2em] text-slate-500 sm:tracking-[0.32em]">
-            Press Enter ↵ to share your reflection
-          </p>
-        </div>
+        </motion.div>
       </footer>
 
       <style jsx>{`
         :global(html),
         :global(body) {
           height: 100%;
-          margin: 0;
           overflow: hidden;
-          background: #ecf1ff;
-          font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont,
-            "Segoe UI", sans-serif;
+          background: linear-gradient(
+            180deg,
+            #ecf1ff 0%,
+            #f8f4ff 45%,
+            #fff5f7 100%
+          );
         }
         .chat-scrollbar::-webkit-scrollbar {
           width: 6px;
