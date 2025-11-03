@@ -198,7 +198,7 @@ const JournalPage = () => {
           }}
         />
         <motion.div
-          className="animate-shimmer absolute left-[55%] top-[26%] hidden h-[4px] w-[11rem] rounded-full bg-gradient-to-r from-transparent via-white/80 to-transparent md:block"
+          className="animate-shimmer absolute left-[55%] top-[26%] hidden h-[4px] w-[11rem] rounded-full bg-linear-to-r from-transparent via-white/80 to-transparent md:block"
           animate={{ opacity: [0.2, 0.7, 0.2], scaleX: [0.8, 1.1, 0.8] }}
           transition={{ duration: 6, repeat: Infinity, repeatType: "mirror" }}
         />
@@ -281,7 +281,7 @@ const JournalPage = () => {
                 </div>
               </header>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap md:flex-nowrap gap-3">
                 {moodOptions.map((option) => {
                   const active = option.label === mood;
                   return (
@@ -488,7 +488,7 @@ const JournalPage = () => {
                     className="relative ml-6 overflow-hidden rounded-[2.3rem] border-4 border-slate-900 bg-gradient-to-br from-white/95 via-[#F3F8FF]/93 to-[#FFF7EC]/95 px-5 py-5 shadow-[18px_18px_0px_rgba(15,23,42,0.2)] backdrop-blur-[14px] sm:ml-12 sm:px-8 sm:py-7"
                   >
                     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(252,216,164,0.32),_transparent_55%)]" />
-                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_rgba(197,220,255,0.25),_transparent_60%)]" />
+                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(197,220,255,0.25),transparent_60%)]" />
                     <span className="absolute -left-7 top-6 grid h-10 w-10 place-items-center rounded-full border-4 border-slate-900 bg-[#FFE5A5] text-lg font-bold text-slate-900 shadow-[8px_8px_0px_rgba(15,23,42,0.22)] sm:-left-8">
                       {entry.mood === "Joyful"
                         ? "🌞"
