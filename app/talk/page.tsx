@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, type Transition } from "framer-motion";
 import Link from "next/link";
+import { ChevronLeft, NotebookPen } from "lucide-react";
 
 type Status = "idle" | "recording" | "processing" | "speaking" | "error";
 
@@ -256,39 +257,45 @@ export default function VoicePage() {
       </div>
 
       {/* Header */}
-      <header className="w-full border-b-4 border-black bg-white/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <motion.button
-            onClick={handleBack}
-            className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-black bg-black px-4 py-2 text-sm font-semibold text-white shadow-[4px_4px_0_#000] sm:w-auto sm:justify-start"
-            whileHover={{ scale: 1.05, rotate: -2 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <IconBack />
-            Back
-          </motion.button>
+      <header className="w-full border-b-4 border-black bg-white/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3 sm:py-4">
+          {/* Back Button */}
+          <motion.div whileHover={{ scale: 1.05 }} className="z-10">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-slate-900 bg-[#FFE5A5] px-2.5 py-1 text-[0.7rem] font-bold uppercase tracking-[0.15em] text-slate-900 shadow-[3px_3px_0px_rgba(15,23,42,0.25)] sm:px-4 sm:py-1.5 sm:text-xs"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Back</span>
+            </Link>
+          </motion.div>
+
+          {/* Talk to Sarathi (text only, center aligned) */}
           <motion.div
-            className="flex w-full justify-center sm:w-auto"
-            initial={{ opacity: 0, y: -10 }}
+            className="flex justify-center flex-1"
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
           >
             <Link
               href="/talk"
-              className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-black bg-gradient-to-r from-[#F4E8FF] via-[#E4F4FF] to-[#FFEED8] px-6 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-900 shadow-[6px_6px_0_#00000022] sm:w-auto"
+              className="flex items-center justify-center rounded-full border-2 border-black bg-gradient-to-r from-[#F4E8FF] via-[#E4F4FF] to-[#FFEED8] px-4 py-1 text-xs font-black uppercase tracking-[0.22em] text-slate-900 shadow-[4px_4px_0_#00000022] sm:px-6 sm:py-2 sm:text-sm"
             >
               Talk to Sarathi
             </Link>
           </motion.div>
+
+          {/* Journal */}
           <motion.div
-            className="flex w-full justify-center sm:w-auto sm:justify-end"
+            className="flex justify-center sm:justify-end"
             whileHover={{ scale: 1.05, rotate: 1 }}
             whileTap={{ scale: 0.94 }}
           >
             <Link
               href="/journal"
-              className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-black bg-gradient-to-r from-[#CDEBFF] via-[#DFFFE9] to-[#FFE5FB] px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-900 shadow-[6px_6px_0_#00000022] sm:w-auto"
+              className="flex items-center justify-center gap-2 rounded-full border-2 border-black bg-gradient-to-r from-[#CDEBFF] via-[#DFFFE9] to-[#FFE5FB] px-3 py-1 text-[0.7rem] font-black uppercase tracking-[0.2em] text-slate-900 shadow-[4px_4px_0_#00000022] sm:px-5 sm:py-2 sm:text-xs"
             >
-              Journal
+              <NotebookPen className="h-4 w-4" />
+              <span className="hidden sm:inline">Journal</span>
             </Link>
           </motion.div>
         </div>
