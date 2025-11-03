@@ -96,14 +96,16 @@ export default function ChatPage() {
         </div>
 
         {/* Right: Voice */}
-        <button
+        <motion.button
           onClick={() => router.push("/talk")}
           title="Voice mode"
           aria-label="Voice mode"
-          className="absolute right-4 top-1/2 -translate-y-1/2 grid place-items-center bg-[#ffeb99] border-2 border-[#3a2e0f] rounded-xl p-2 shadow-[3px_3px_0px_#3a2e0f]   hover:shadow-[4px_4px_0px_#3a2e0f] active:translate-y-0 transition"
+          className="absolute right-4 top-1/2 -translate-y-1/2 grid place-items-center bg-[#ffeb99] border-2 border-[#3a2e0f] rounded-xl p-2 shadow-[3px_3px_0px_#3a2e0f]"
+          whileHover={{ scale: 1.08, y: -2 }}
+          whileTap={{ scale: 0.95 }}
         >
           <Mic className="w-4 h-4 text-[#3a2e0f]" />
-        </button>
+        </motion.button>
       </motion.header>
 
       {/* Scrollable chat area (with padding for fixed header/footer) */}
