@@ -22,3 +22,6 @@ Send audio blob → /api/voice.
 Play back AI voice (TTS audio).
 
 Handle stop/start state + recording indicator.
+
+
+ex- I’m in a hackathon and feeling a bit stressed. Can you help me calm down?
