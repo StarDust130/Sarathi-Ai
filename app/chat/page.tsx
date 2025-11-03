@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { SendHorizonal } from "lucide-react";
+import { SendHorizonal, ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function ChatPage() {
+  const router = useRouter();
   const [messages, setMessages] = useState([
     { role: "ai", text: "🌸 Namaste! I am your Sarathi — your companion on the path of calm and clarity." },
   ]);
@@ -31,15 +33,27 @@ export default function ChatPage() {
 
   return (
     <main className="relative flex flex-col items-center justify-between min-h-screen bg-gradient-to-br from-[#fff9e6] via-[#ffebb0] to-[#ffd580] text-[#3a2e0f]">
+      
       {/* Header */}
       <motion.header
         initial={{ y: -30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 1 }}
-        className="w-full py-5 text-center bg-[#ffcc66]/90 backdrop-blur-md border-b-4 border-[#3a2e0f] shadow-[6px_6px_0px_#3a2e0f]"
+        className="relative w-full py-5 bg-[#ffcc66]/90 backdrop-blur-md border-b-4 border-[#3a2e0f] shadow-[6px_6px_0px_#3a2e0f] flex items-center justify-center"
       >
-        <h1 className="text-3xl sm:text-4xl font-extrabold">🪷 Sarathi AI Chat</h1>
-        <p className="text-sm italic text-[#4b3b15]">“Guiding thoughts, calming minds.”</p>
+        {/* ✅ Back Button (Top Left Corner, fixed alignment) */}
+        <button
+          onClick={() => router.push("/")}
+          className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[#3a2e0f] font-bold bg-[#ffeb99] border-2 border-[#3a2e0f] rounded-xl px-3 py-1 shadow-[3px_3px_0px_#3a2e0f] hover:scale-105 transition"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
+
+        {/* ✅ Centered Title */}
+        <div className="text-center">
+          <h1 className="text-3xl sm:text-4xl font-extrabold">🪷 Sarathi AI Chat</h1>
+          <p className="text-sm italic text-[#4b3b15]">“Guiding thoughts, calming minds.”</p>
+        </div>
       </motion.header>
 
       {/* Chat Messages */}
@@ -98,6 +112,8 @@ export default function ChatPage() {
     </main>
   );
 }
+
+
 
 
 
