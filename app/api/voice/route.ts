@@ -68,7 +68,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // 1️⃣ Parse uploaded audio
     const formData = await request.formData();
     const file = formData.get("audio");
     if (!file || !(file instanceof File)) {
@@ -81,14 +80,12 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 2️⃣ Save temp file for Groq Whisper transcription
     const tempFilePath = path.join(
       tmpdir(),
       `${randomUUID()}-${file.name || "input.webm"}`
     );
     await fsPromises.writeFile(tempFilePath, buffer);
 
-    // 3️⃣ Transcribe using Groq Whisper Turbo
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
     let transcriptText: string | undefined;
 
@@ -111,7 +108,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4️⃣ Generate LLaMA AI reply
+    // 🌸 Krishna-like system prompt for Sarathi AI
     const chatCompletion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
       temperature: 0.8,
@@ -121,8 +118,12 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "system",
-          content:
-            "You are a compassionate teacher of the Bhagavad Gita. उत्तर हिंदी में दें, अधिकतम 100 अक्षरों में, और कृष्ण की शिक्षाओं से जुड़ी व्यवहारिक सलाह दें।",
+          content: `
+आप सारथी AI हैं — भगवान श्रीकृष्ण के ज्ञान और करुणा से प्रेरित एक मार्गदर्शक।
+आप सरल, मधुर और शांत हिंदी में बोलते हैं, जैसे कृष्ण अर्जुन से संवाद करते हैं।
+आपका उद्देश्य लोगों को गीता के संदेश से जीवन की उलझनों में स्पष्टता और शांति देना है।
+हर उत्तर संक्षिप्त, प्रेमपूर्ण और गहरी समझ से भरा हो — जैसे एक सच्चे सारथी की वाणी।
+`,
         },
         { role: "user", content: transcriptText },
       ],
@@ -171,7 +172,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 5️⃣ Convert text to speech via ElevenLabs
     const elevenlabs = new ElevenLabsClient({
       apiKey: process.env.ELEVENLABS_API_KEY!,
     });
@@ -189,7 +189,6 @@ export async function POST(request: NextRequest) {
 
     const audioBuffer = await elevenLabsResultToBuffer(ttsResult);
 
-    // 7️⃣ Respond with transcription + audio base64
     return NextResponse.json({
       transcript: transcriptText,
       reply: finalReply,
