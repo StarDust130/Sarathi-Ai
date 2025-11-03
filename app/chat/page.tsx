@@ -1,248 +1,122 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
-
-type Msg = { role: "user" | "assistant"; content: string };
+import { SendHorizonal, ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function ChatPage() {
-  const [text, setText] = useState("");
-  const [chat, setChat] = useState<Msg[]>([
-    { role: "assistant", content: "Namaste 🙏 — ask me anything from the Bhagavad Gita." },
+  const router = useRouter();
+  const [messages, setMessages] = useState([
+    { role: "ai", text: "🌸 Namaste! I am your Sarathi — your companion on the path of calm and clarity." },
   ]);
-  const [loading, setLoading] = useState(false);
-  const chatRef = useRef<HTMLDivElement | null>(null);
+  const [input, setInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
 
-  useEffect(() => {
-    chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
-  }, [chat]);
+  const handleSend = () => {
+    if (!input.trim()) return;
 
-  async function send() {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    const userMsg: Msg = { role: "user", content: trimmed };
-    setChat((c) => [...c, userMsg]);
-    setText("");
-    setLoading(true);
+    const newMsg = { role: "user", text: input };
+    setMessages((prev) => [...prev, newMsg]);
+    setInput("");
+    setIsTyping(true);
 
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ arjun: trimmed }),
-      });
-
-      const data = await res.json();
-      // safely extract reply
-      const reply: string = (data?.SarthiAi ?? data?.error ?? "No reply from AI") as string;
-
-      // create assistant message and append correctly
-      const assistantMsg: Msg = { role: "assistant", content: reply };
-      setChat((c) => [...c, assistantMsg]);
-    } catch (e) {
-      setChat((c) => [...c, { role: "assistant", content: "⚠️ Network error — please try again." }]);
-    } finally {
-      setLoading(false);
-    }
-  }
+    // Simulated AI reply
+    setTimeout(() => {
+      setIsTyping(false);
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: "🌿 Reflect on that… everything begins with a peaceful mind." },
+      ]);
+    }, 1200);
+  };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(180deg, #e0f2fe, #fffaf0)",
-        padding: 24,
-        fontFamily: "Inter, sans-serif",
-      }}
-    >
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        <motion.header
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 20,
-          }}
+    <main className="relative flex flex-col items-center justify-between min-h-screen bg-gradient-to-br from-[#fff9e6] via-[#ffebb0] to-[#ffd580] text-[#3a2e0f]">
+      
+      {/* Header */}
+      <motion.header
+        initial={{ y: -30, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 1 }}
+        className="relative w-full py-5 bg-[#ffcc66]/90 backdrop-blur-md border-b-4 border-[#3a2e0f] shadow-[6px_6px_0px_#3a2e0f] flex items-center justify-center"
+      >
+        {/* ✅ Back Button (Top Left Corner, fixed alignment) */}
+        <button
+          onClick={() => router.push("/")}
+          className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[#3a2e0f] font-bold bg-[#ffeb99] border-2 border-[#3a2e0f] rounded-xl px-3 py-1 shadow-[3px_3px_0px_#3a2e0f] hover:scale-105 transition"
         >
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: 800, color: "#1e3a8a" }}>
-              🪷 Saarthi — Bhagavad Gita AI
-            </h1>
-            <p style={{ marginTop: 6, color: "#374151" }}>
-              Ask about duty, leadership, karma, and resilience — guided by Krishna’s wisdom.
-            </p>
-          </div>
-          <div>
-            <span
-              style={{
-                display: "inline-block",
-                padding: "6px 10px",
-                borderRadius: 999,
-                background: "#e0e7ff",
-                color: "#1e3a8a",
-                fontWeight: 700,
-              }}
-            >
-              SarthiAi
-            </span>
-          </div>
-        </motion.header>
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
 
-        <section
-          style={{
-            background: "#fff",
-            borderRadius: 18,
-            boxShadow: "0 6px 24px rgba(16,24,40,0.08)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: 14,
-              borderBottom: "1px solid #f3f4f6",
-              display: "flex",
-              gap: 12,
-              alignItems: "center",
-            }}
+        {/* ✅ Centered Title */}
+        <div className="text-center">
+          <h1 className="text-3xl sm:text-4xl font-extrabold">🪷 Sarathi AI Chat</h1>
+          <p className="text-sm italic text-[#4b3b15]">“Guiding thoughts, calming minds.”</p>
+        </div>
+      </motion.header>
+
+      {/* Chat Messages */}
+      <div className="flex-1 w-full max-w-2xl overflow-y-auto px-4 py-6 space-y-4">
+        {messages.map((m, i) => (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 999,
-                background: "#c7d2fe",
-                color: "#312e81",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: 800,
-              }}
+              className={`max-w-[80%] px-4 py-3 rounded-3xl border-2 ${
+                m.role === "user"
+                  ? "bg-[#ffcc66] border-[#3a2e0f] text-[#3a2e0f] shadow-[3px_3px_0px_#3a2e0f]"
+                  : "bg-[#a5d6a7] border-[#1b3d0f] text-[#1b3d0f] shadow-[3px_3px_0px_#1b3d0f]"
+              }`}
             >
-              SA
+              {m.text}
             </div>
-            <div style={{ color: "#374151" }}>
-              <strong>SarthiAi</strong> — Your Bhagavad Gita guide
-            </div>
-          </div>
+          </motion.div>
+        ))}
 
-          <div
-            ref={chatRef}
-            style={{
-              padding: 16,
-              height: "60vh",
-              overflow: "auto",
-              gap: 12,
-              display: "flex",
-              flexDirection: "column",
-            }}
+        {isTyping && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="italic text-[#2e3b10] pl-2"
           >
-            {chat.map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  justifyContent:
-                    m.role === "user" ? "flex-end" : "flex-start",
-                }}
-              >
-                <div
-                  style={{
-                    maxWidth: "80%",
-                    padding: "10px 14px",
-                    borderRadius: 14,
-                    background:
-                      m.role === "user" ? "#dbeafe" : "#f3f4f6",
-                    color: "#111827",
-                    border:
-                      m.role === "user"
-                        ? "1px solid #93c5fd"
-                        : "1px solid #e5e7eb",
-                  }}
-                >
-                  <div style={{ fontSize: 14, lineHeight: 1.4 }}>
-                    {m.content}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {loading && (
-              <div style={{ color: "#6b7280" }}>SarthiAi is thinking…</div>
-            )}
-          </div>
-
-          <div
-            style={{
-              padding: 14,
-              borderTop: "1px solid #f3f4f6",
-              background: "linear-gradient(180deg,#fff,#ffffffcc)",
-            }}
-          >
-            <div style={{ display: "flex", gap: 10 }}>
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                rows={2}
-                placeholder="Ask: 'What is karma according to Krishna?'"
-                style={{
-                  flex: 1,
-                  resize: "none",
-                  padding: 12,
-                  borderRadius: 12,
-                  border: "1px solid #d1d5db",
-                  outline: "none",
-                  fontSize: 14,
-                  color: "#111827",
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-              />
-              <button
-                onClick={send}
-                disabled={loading}
-                style={{
-                  background: "#2563eb",
-                  color: "#fff",
-                  padding: "10px 16px",
-                  borderRadius: 12,
-                  border: "none",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  boxShadow: "0 4px 8px rgba(37,99,235,0.2)",
-                }}
-              >
-                {loading ? "Thinking..." : "Ask"}
-              </button>
-            </div>
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 12,
-                color: "#6b7280",
-              }}
-            >
-              💡 Tip: Short, specific questions get clearer answers.
-            </div>
-          </div>
-        </section>
-
-        <footer
-          style={{
-            textAlign: "center",
-            marginTop: 14,
-            fontSize: 12,
-            color: "#9ca3af",
-          }}
-        >
-          Built with ❤️ — Inspired by the Bhagavad Gita
-        </footer>
+            Sarathi is typing<span className="animate-pulse">...</span>
+          </motion.div>
+        )}
       </div>
-    </div>
+
+      {/* Input Section */}
+      <div className="w-full max-w-2xl flex items-center gap-3 px-4 pb-6">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)} // ✅ typing works
+          onKeyDown={(e) => e.key === "Enter" && handleSend()} // ✅ enter works
+          placeholder="Type your thoughts..."
+          className="flex-1 px-5 py-3 rounded-2xl border-4 border-[#3a2e0f] bg-[#fffaf0] text-[#3a2e0f] shadow-[4px_4px_0px_#3a2e0f] focus:outline-none"
+        />
+
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={handleSend} // ✅ send button works
+          className="bg-[#ffcc66] border-4 border-[#3a2e0f] rounded-2xl p-3 shadow-[4px_4px_0px_#3a2e0f]"
+        >
+          <SendHorizonal className="w-5 h-5 text-[#3a2e0f]" />
+        </motion.button>
+      </div>
+    </main>
   );
 }
-// do
+
+
+
+
+
+
+
+
