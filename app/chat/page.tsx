@@ -178,7 +178,7 @@ export default function ChatPage() {
               className="inline-flex items-center gap-2 rounded-full border-[3px] border-slate-900/70 bg-gradient-to-r from-[#C2B5FF] via-[#FFB3C6] to-[#FFD481] px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.22em] text-slate-900 shadow-md transition sm:px-4 sm:py-2 sm:text-sm"
             >
               <Mic className="h-4 w-4" />
-              <span className="hidden sm:inline">Talk</span>
+              <span className="hidden sm:inline">Talk to Sarathi</span>
             </Link>
           </motion.div>
         </div>

@@ -2,17 +2,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Transition } from "framer-motion";
+import Link from "next/link";
 
 type Status = "idle" | "recording" | "processing" | "speaking" | "error";
-type Petal = {
-  id: number;
-  left: number;
-  top: number;
-  size: number;
-  delay: number;
-  duration: number;
-};
 
 const IconMic = () => (
   <svg
@@ -75,7 +68,6 @@ export default function VoicePage() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusLabel, setStatusLabel] = useState("Tap to Speak");
-  const [petals, setPetals] = useState<Petal[]>([]);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -91,19 +83,6 @@ export default function VoicePage() {
     };
     setStatusLabel(labelMap[status]);
   }, [status]);
-
-  useEffect(() => {
-    setPetals(
-      Array.from({ length: 18 }).map((_, idx) => ({
-        id: idx,
-        left: Math.random() * 100,
-        top: -Math.random() * 140,
-        size: 22 + Math.random() * 26,
-        delay: Math.random() * 4,
-        duration: 12 + Math.random() * 9,
-      }))
-    );
-  }, []);
 
   const stopAiPlayback = () => {
     if (audioPlayerRef.current) {
@@ -178,27 +157,68 @@ export default function VoicePage() {
 
   // 🌸 Softer Sarathi color tones
   const colors = {
-    idle: "bg-gradient-to-br from-pink-300 via-amber-300 to-rose-300",
-    recording: "bg-gradient-to-br from-rose-500 to-red-400",
-    processing: "bg-gradient-to-br from-yellow-400 to-amber-500",
-    speaking: "bg-gradient-to-br from-green-400 to-emerald-500",
-    error: "bg-gradient-to-br from-gray-600 to-gray-800",
+    idle: "bg-gradient-to-br from-[#C9E4FF] via-[#F8F4FF] to-[#FFE6CC]",
+    recording: "bg-gradient-to-br from-[#FB7185] via-[#F2A766] to-[#FCD58A]",
+    processing: "bg-gradient-to-br from-[#FFE599] via-[#FCE8D8] to-[#F3D0FF]",
+    speaking: "bg-gradient-to-br from-[#60F1C1] via-[#38BDF8] to-[#A855F7]",
+    error: "bg-gradient-to-br from-[#3F425B] via-[#272846] to-[#0F172A]",
   };
 
   const statusDescriptions: Record<Status, string> = {
     idle: "Tap the lotus orb to begin your guided exchange.",
     recording: "Share your truth—Sarathi is listening with grace.",
     processing: "Wisdom is distilling in the ether. Stay centered.",
-    speaking: "Receive the response carried on a calm current.",
+    speaking: "Let Sarathi’s insight flow back like a moonlit tide.",
     error: "The link trembled—reset and invoke the voice again.",
   };
 
+  const orbScaleMap: Record<Status, number[] | number> = {
+    idle: [1, 1.05, 1],
+    recording: [1, 1.12, 1],
+    processing: 1,
+    speaking: [1, 1.08, 1],
+    error: 1,
+  };
+
+  const orbScaleTransitions: Record<Status, Transition> = {
+    idle: {
+      duration: 1.6,
+      repeat: Infinity,
+      repeatType: "mirror",
+      ease: "easeInOut",
+    },
+    recording: {
+      duration: 1.2,
+      repeat: Infinity,
+      repeatType: "mirror",
+      ease: "easeInOut",
+    },
+    processing: {
+      duration: 0.6,
+      repeat: Infinity,
+      repeatType: "mirror",
+      ease: "easeInOut",
+    },
+    speaking: {
+      duration: 1.4,
+      repeat: Infinity,
+      repeatType: "mirror",
+      ease: "easeInOut",
+    },
+    error: {
+      duration: 0.8,
+      repeat: Infinity,
+      repeatType: "mirror",
+      ease: "easeInOut",
+    },
+  };
+
   const orbVariants = {
-    idle: { scale: [1, 1.05, 1] },
-    recording: { scale: [1, 1.12, 1] },
-    processing: { rotate: [0, 360] },
-    speaking: { scale: [1, 1.08, 1] },
-    error: { scale: [1, 1, 1] },
+    idle: { scale: [1, 1.05, 1], rotate: 0 },
+    recording: { scale: [1, 1.12, 1], rotate: 0 },
+    processing: { scale: 1, rotate: [0, 360] },
+    speaking: { scale: [1, 1.08, 1], rotate: 0 },
+    error: { scale: [1, 1, 1], rotate: 0 },
   };
 
   const orbIcon =
@@ -212,69 +232,65 @@ export default function VoicePage() {
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-between overflow-hidden bg-[#FFF9F2] font-sans text-black">
-      <motion.div
-        className="pointer-events-none absolute -top-48 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-[6rem] border-4 border-black bg-gradient-to-br from-[#FFB4BD] via-[#FFD3A4] to-[#FFF5DA] opacity-90 shadow-[18px_18px_0_#00000033]"
-        animate={{ rotate: [0, 6, -4, 0], y: [0, -18, 6, 0] }}
-        transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.div
-        className="pointer-events-none absolute bottom-[-18rem] right-[-8rem] h-[36rem] w-[30rem] rounded-[5rem] border-4 border-black bg-gradient-to-tr from-[#A5B4FC] via-[#7DD3FC] to-[#F0ABFC] shadow-[20px_20px_0_#00000028]"
-        animate={{ rotate: [0, -5, 3, 0], y: [0, -24, 10, 0] }}
-        transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.div
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[1100px] w-[1100px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-[#fdd835]/40 via-[#ffd07f]/45 to-[#ffc8dd]/35 blur-[200px]"
-        animate={{ scale: [0.96, 1.08, 1], opacity: [0.45, 0.7, 0.5] }}
-        transition={{ duration: 18, repeat: Infinity, repeatType: "reverse" }}
-      />
-      {petals.map((petal) => (
-        <motion.span
-          key={petal.id}
-          className="absolute z-10 select-none text-3xl"
-          style={{
-            left: `${petal.left}%`,
-            top: `${petal.top}px`,
-            fontSize: `${petal.size}px`,
-          }}
-          initial={{ y: "-15vh", opacity: 0 }}
-          animate={{
-            y: "115vh",
-            opacity: [0.35, 0.65, 0.35],
-            rotate: [0, 12, -12, 0],
-          }}
-          transition={{
-            duration: petal.duration,
-            delay: petal.delay,
-            repeat: Infinity,
-            repeatType: "loop",
-            ease: "easeInOut",
-          }}
-        >
-          🪷
-        </motion.span>
-      ))}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <motion.div
+          className="absolute -top-40 left-[12%] h-[28rem] w-[24rem] rounded-[6rem] border-4 border-black/70 bg-gradient-to-br from-[#D9EDFF] via-[#F3E4FF] to-[#FFE6D1] shadow-[20px_20px_0_#00000025]"
+          animate={{ rotate: [0, 4, -3, 0], y: [0, -20, 10, 0] }}
+          transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute bottom-[-14rem] right-[-6rem] h-[34rem] w-[30rem] rounded-[6rem] border-4 border-black/70 bg-gradient-to-tr from-[#B2F5EA] via-[#C7F0FF] to-[#EAD8FF] shadow-[22px_22px_0_#00000022]"
+          animate={{ rotate: [0, -6, 4, 0], y: [0, -26, 12, 0] }}
+          transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute left-1/2 top-1/2 h-[1100px] w-[1100px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-[#fef3c7]/45 via-[#fde2ff]/55 to-[#dbeafe]/55 blur-[220px]"
+          animate={{ scale: [0.94, 1.08, 0.98], opacity: [0.4, 0.72, 0.5] }}
+          transition={{ duration: 20, repeat: Infinity, repeatType: "mirror" }}
+        />
+        <motion.div
+          className="absolute left-1/2 top-[22%] hidden h-[10px] w-[18rem] -translate-x-1/2 rounded-full bg-white/70 shadow-[0_0_40px_rgba(255,255,255,0.6)] md:block"
+          animate={{ opacity: [0.35, 0.85, 0.35], scaleX: [0.7, 1.08, 0.9] }}
+          transition={{ duration: 8, repeat: Infinity, repeatType: "mirror" }}
+        />
+      </div>
 
       {/* Header */}
-      <header className="w-full border-b-4 border-black bg-white p-4">
-        <div className="mx-auto flex max-w-4xl items-center justify-between">
+      <header className="w-full border-b-4 border-black bg-white/90 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <motion.button
             onClick={handleBack}
-            className="flex items-center gap-2 rounded-full border-2 border-black bg-black px-4 py-2 text-sm font-semibold text-white shadow-[4px_4px_0_#000]"
+            className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-black bg-black px-4 py-2 text-sm font-semibold text-white shadow-[4px_4px_0_#000] sm:w-auto sm:justify-start"
             whileHover={{ scale: 1.05, rotate: -2 }}
             whileTap={{ scale: 0.95 }}
           >
             <IconBack />
             Back
           </motion.button>
-
-          <motion.h1
-            className="text-center text-3xl font-extrabold tracking-tight text-[#A44A1D]"
+          <motion.div
+            className="flex w-full justify-center sm:w-auto"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            🪷 Sarathi Voice
-          </motion.h1>
-          <div className="w-[90px]" />
+            <Link
+              href="/talk"
+              className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-black bg-gradient-to-r from-[#F4E8FF] via-[#E4F4FF] to-[#FFEED8] px-6 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-900 shadow-[6px_6px_0_#00000022] sm:w-auto"
+            >
+              Talk to Sarathi
+            </Link>
+          </motion.div>
+          <motion.div
+            className="flex w-full justify-center sm:w-auto sm:justify-end"
+            whileHover={{ scale: 1.05, rotate: 1 }}
+            whileTap={{ scale: 0.94 }}
+          >
+            <Link
+              href="/journal"
+              className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-black bg-gradient-to-r from-[#CDEBFF] via-[#DFFFE9] to-[#FFE5FB] px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-900 shadow-[6px_6px_0_#00000022] sm:w-auto"
+            >
+              Journal
+            </Link>
+          </motion.div>
         </div>
       </header>
 
@@ -287,14 +303,24 @@ export default function VoicePage() {
         />
         <motion.div
           onClick={handleOrbClick}
-          animate={orbVariants[status] ?? orbVariants.idle}
-          transition={
-            status === "processing"
-              ? { duration: 1.1, repeat: Infinity, ease: "linear" }
-              : { duration: 1.4, repeat: Infinity, ease: "easeInOut" }
-          }
+          animate={{ scale: orbScaleMap[status] }}
+          transition={orbScaleTransitions[status]}
           className={`relative flex h-64 w-64 cursor-pointer items-center justify-center rounded-full border-4 border-black shadow-[10px_10px_0_#000] ${colors[status]}`}
         >
+          <motion.div
+            key={status === "processing" ? "processing-halo" : "resting-halo"}
+            className="pointer-events-none absolute -inset-6 rounded-full border-2 border-white/40"
+            animate={
+              status === "processing"
+                ? { rotate: 360, opacity: [0.4, 0.75, 0.4] }
+                : { rotate: 0, opacity: 0.5 }
+            }
+            transition={
+              status === "processing"
+                ? { duration: 1.1, repeat: Infinity, ease: "linear" }
+                : { duration: 0.35, ease: "easeOut" }
+            }
+          />
           {/* --- FIX 1: ICON CONTAINER --- */}
           {/* This div now counter-rotates the icon when the status is "processing" */}
           <motion.div
@@ -388,7 +414,42 @@ export default function VoicePage() {
           transition={{ duration: 0.35 }}
           className="relative z-20 max-w-md rounded-3xl border-4 border-black bg-white/80 px-6 py-4 text-sm font-semibold text-[#5a4211] shadow-[10px_10px_0_#0000002c] backdrop-blur-sm"
         >
-          {statusDescriptions[status]}
+          {status === "speaking" && (
+            <motion.div
+              key="speaking-banner"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.3 }}
+              className="mb-2 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-[0.3em] text-[#2563eb]"
+            >
+              <motion.span
+                animate={{ rotate: [0, 8, -8, 0] }}
+                transition={{
+                  duration: 1.8,
+                  repeat: Infinity,
+                  repeatType: "mirror",
+                }}
+              >
+                ✨
+              </motion.span>
+              <span className="bg-gradient-to-r from-[#38BDF8] via-[#A855F7] to-[#E879F9] bg-clip-text text-transparent">
+                Resonance
+              </span>
+              <motion.span
+                animate={{ rotate: [0, -8, 8, 0] }}
+                transition={{
+                  duration: 1.8,
+                  repeat: Infinity,
+                  repeatType: "mirror",
+                  delay: 0.3,
+                }}
+              >
+                ✨
+              </motion.span>
+            </motion.div>
+          )}
+          <span>{statusDescriptions[status]}</span>
         </motion.div>
 
         {status === "error" && errorMessage && (
