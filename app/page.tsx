@@ -88,7 +88,7 @@ export default function Home() {
 
         <motion.a
           whileHover={{ y: -4 }}
-          href="/voice"
+          href="/talk"
           className="bg-[#81c784] text-[#1b3d0f] px-8 py-3 text-lg font-bold rounded-2xl border-4 border-[#1b3d0f] shadow-[6px_6px_0px_#1b3d0f]"
         >
           🎙️ Start Voice
