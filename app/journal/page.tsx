@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { ChevronLeft, ChevronDown, MessageSquareQuote } from "lucide-react";
+import { ChevronLeft, ChevronDown, NotebookPen } from "lucide-react";
 
 type JournalEntry = {
   id: string;
@@ -204,39 +204,46 @@ const JournalPage = () => {
         />
       </div>
 
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 pb-24 pt-16 sm:px-6 lg:px-10">
-        <header className="flex w-full items-center justify-between rounded-3xl border-4 border-slate-900 bg-[#F7FAFF]/90 px-3 py-3 shadow-[8px_8px_0px_rgba(15,23,42,0.25)] backdrop-blur-sm sm:px-8 sm:py-4 relative">
-          {/* Left - Back Button */}
-          <motion.div whileHover={{ scale: 1.05 }} className="z-10">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-slate-900 bg-[#FFE5A5] px-3 py-1 text-[0.7rem] font-bold uppercase tracking-[0.15em] text-slate-900 shadow-[4px_4px_0px_rgba(15,23,42,0.25)] sm:px-4 sm:py-1.5 sm:text-xs"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Back</span>
-            </Link>
-          </motion.div>
+      <div className="relative z-10 mx-auto flex flex-col gap-10 w-full px-4 pb-24 sm:px-6 lg:px-10">
+        <header className="-mx-4 sm:-mx-6 lg:-mx-10">
+          <div className="relative w-full overflow-hidden  border-b-4 border-slate-900 bg-gradient-to-r from-[#F7FAFF]/95 via-[#FFFFFF] to-[#E3F1FF]/95 px-4 py-3 shadow-[10px_10px_0px_rgba(15,23,42,0.24)] backdrop-blur-sm sm:px-6 sm:py-4">
+            <motion.div
+              aria-hidden="true"
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8 }}
+              className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-[40rem] -translate-x-1/2 rounded-full bg-gradient-to-r from-[#FFE5A5]/45 via-transparent to-[#AFDCFF]/45 blur-3xl md:block"
+            />
+            <span className="pointer-events-none absolute inset-x-6 bottom-0 h-[3px] rounded-full bg-gradient-to-r from-transparent via-[#FFCD7C] to-transparent sm:inset-x-10" />
+            <div className="relative mx-auto flex w-full max-w-6xl items-center justify-between">
+              {/* Left - Back Button */}
+              <motion.div whileHover={{ scale: 1.05 }} className="z-10">
+                <Link
+                  href="/"
+                  className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-slate-900 bg-[#FFE5A5] px-3 py-1 text-[0.7rem] font-bold uppercase tracking-[0.15em] text-slate-900 shadow-[4px_4px_0px_rgba(15,23,42,0.25)] sm:px-4 sm:py-1.5 sm:text-xs"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline">Back</span>
+                </Link>
+              </motion.div>
 
-          {/* Mobile title (visible on small screens) */}
-          <span className="flex-1 text-center text-[0.85rem] font-extrabold uppercase tracking-[0.18em] text-slate-900 z-10 sm:hidden">
-            Sarathi Journal
-          </span>
+              {/* Center Title */}
+              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-slate-900 bg-white/85 px-5 py-1.5 text-[0.85rem] font-extrabold uppercase tracking-[0.18em] text-slate-900 shadow-[6px_6px_0px_rgba(15,23,42,0.28)] sm:text-[0.9rem]">
+                Talk to Sarathi
+              </span>
 
-          {/* Center - Decorative title for sm+ (hidden on mobile to avoid overlap) */}
-          <span className="hidden sm:inline-flex absolute left-1/2 -translate-x-1/2 items-center rounded-full border-[3px] border-slate-900 bg-white/80 px-4 py-1 text-[0.8rem] font-extrabold uppercase tracking-[0.18em] text-slate-900 shadow-[4px_4px_0px_rgba(15,23,42,0.25)]">
-            Sarathi Journal
-          </span>
-
-          {/* Right - Talk Button */}
-          <motion.div whileHover={{ scale: 1.05 }} className="z-10">
-            <Link
-              href="/chat"
-              className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-slate-900 bg-gradient-to-r from-[#C9F0FF] via-[#E4E8FF] to-[#FFE5F3] px-3 py-1 text-[0.7rem] font-bold uppercase tracking-[0.2em] text-slate-900 shadow-[4px_4px_0px_rgba(15,23,42,0.22)] sm:px-4 sm:py-1.5 sm:text-xs"
-            >
-              <MessageSquareQuote className="h-4 w-4" />
-              <span className="hidden sm:inline">Talk to Sarathi</span>
-            </Link>
-          </motion.div>
+              {/* Right - Journal Button */}
+              <motion.div whileHover={{ scale: 1.05 }} className="z-10">
+                <Link
+                  href="/journal"
+                  className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-slate-900 bg-gradient-to-r from-[#C9F0FF] via-[#E4E8FF] to-[#FFE5F3] px-3 py-1 text-[0.7rem] font-bold uppercase tracking-[0.2em] text-slate-900 shadow-[4px_4px_0px_rgba(15,23,42,0.22)] sm:px-4 sm:py-1.5 sm:text-xs"
+                >
+                  <NotebookPen className="h-4 w-4 sm:h-4 sm:w-4" />
+                  <span className="hidden sm:inline">Sarathi Journal</span>
+                </Link>
+              </motion.div>
+            </div>
+          </div>
         </header>
 
         <section className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
