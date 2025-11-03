@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { ChevronLeft, ChevronDown, NotebookPen } from "lucide-react";
+import { ChevronLeft, ChevronDown, MessagesSquare } from "lucide-react";
 
 type JournalEntry = {
   id: string;
@@ -229,17 +229,17 @@ const JournalPage = () => {
 
               {/* Center Title */}
               <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-slate-900 bg-white/85 px-5 py-1.5 text-[0.85rem] font-extrabold uppercase tracking-[0.18em] text-slate-900 shadow-[6px_6px_0px_rgba(15,23,42,0.28)] sm:text-[0.9rem]">
-                Talk to Sarathi
+                Sarathi Journal
               </span>
 
               {/* Right - Journal Button */}
               <motion.div whileHover={{ scale: 1.05 }} className="z-10">
                 <Link
-                  href="/journal"
+                  href="/chat"
                   className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-slate-900 bg-gradient-to-r from-[#C9F0FF] via-[#E4E8FF] to-[#FFE5F3] px-3 py-1 text-[0.7rem] font-bold uppercase tracking-[0.2em] text-slate-900 shadow-[4px_4px_0px_rgba(15,23,42,0.22)] sm:px-4 sm:py-1.5 sm:text-xs"
                 >
-                  <NotebookPen className="h-4 w-4 sm:h-4 sm:w-4" />
-                  <span className="hidden sm:inline">Sarathi Journal</span>
+                  <MessagesSquare className="h-4 w-4 sm:h-4 sm:w-4" />
+                  <span className="hidden sm:inline">Chat with Sarathi</span>
                 </Link>
               </motion.div>
             </div>
