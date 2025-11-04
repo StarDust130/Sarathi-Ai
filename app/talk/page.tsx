@@ -427,10 +427,11 @@ export default function VoicePage() {
           timestamp: Date.now(),
           tone: activeTone.value,
           language:
-            result?.language === "hindi" ||
-            result?.language === "hinglish" ||
-            result?.language === "english"
-              ? result.language
+            result?.language === "hindi"
+              ? "hindi"
+              : result?.language === "hinglish" ||
+                result?.language === "english"
+              ? "hinglish"
               : "unknown",
         };
         setHistory((prev) => {

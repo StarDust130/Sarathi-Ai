@@ -78,11 +78,11 @@ const parseHistoryTurns = (raw: FormDataEntryValue | null): HistoryTurn[] => {
           (turn as Record<string, unknown>).language ?? ""
         ).toLowerCase();
         const language: TranscriptLanguage =
-          languageRaw === "hindi" || languageRaw === "hinglish"
-            ? languageRaw
-            : languageRaw === "english"
-            ? "english"
-            : "english";
+          languageRaw === "hindi"
+            ? "hindi"
+            : languageRaw === "hinglish" || languageRaw === "english"
+            ? "hinglish"
+            : "hinglish";
         return { user, assistant, tone, language };
       })
       .filter(Boolean) as HistoryTurn[];
@@ -192,7 +192,8 @@ function buildSystemPrompt({
   const toneGuide = toneDirections[tone];
   const isLong = talkMode !== "short";
   const languageGuide: Record<TranscriptLanguage, string> = {
-    english: "Answer fully in English with clear, grounded sentences.",
+    english:
+      "Even if the seeker speaks in English, respond back in warm Hinglish (Latin script) so the blend of Hindi and English feels natural and caring.",
     hinglish:
       "Reply in warm Hinglish using the Latin script, blending Hindi and English words naturally.",
     hindi:
@@ -230,7 +231,7 @@ ${toneGuide}
 **Off-Topic Filter:**
 - If they ask for random fun or stray off support topics, gently redirect.
 - Respond with the matching template (translate when needed):
-  * English: "Please ask your question—I am here to help. If you want fun I think you are happy 🙂"
+  * English/Hinglish: "Please apna sawal batao — main madad ke liye yahan hoon. Agar bas masti karni hai toh mujhe lagta hai tum khush ho 🙂"
   * Hinglish/Hindi: "Apna sachcha sawaal batao, main madad ke liye yahan hoon. Agar bas masti karni hai toh mujhe lagta hai tum khush ho 🙂"
 `;
 }
@@ -321,6 +322,10 @@ export async function POST(request: Request) {
     if (language !== "hindi" && hindiWeight >= 2) {
       language = "hindi";
     } else if (language === "english" && hinglishWeight >= 2) {
+      language = "hinglish";
+    }
+
+    if (language === "english") {
       language = "hinglish";
     }
 
