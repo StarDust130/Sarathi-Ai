@@ -324,7 +324,7 @@ export default function Home() {
               href="/journal"
               className="inline-flex items-center justify-center gap-3 rounded-full border-4 border-slate-900 bg-[#FDF2FF] px-7 py-3 text-sm font-black uppercase tracking-[0.2em] text-slate-900 shadow-[12px_12px_0px_rgba(15,23,42,0.32)] transition-transform duration-200 hover:-translate-y-1 hover:rotate-2 sm:text-base"
             >
-              Open Journal
+              Sarathi Journal 
               <span className="text-2xl leading-none">📝</span>
             </Link>
           </div>
