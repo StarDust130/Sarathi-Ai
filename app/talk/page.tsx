@@ -1,12 +1,65 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, type Transition } from "framer-motion";
 import Link from "next/link";
-import { ChevronLeft, NotebookPen } from "lucide-react";
+import { ChevronLeft, ChevronDown, NotebookPen } from "lucide-react";
 
 type Status = "idle" | "recording" | "processing" | "speaking" | "error";
+
+type ToneValue = "warm" | "spiritual" | "coach";
+
+type ToneOption = {
+  value: ToneValue;
+  label: string;
+  gradient: string;
+  icon: string;
+  tagline: string;
+};
+
+const PROFILE_KEY = "sarathi-profile";
+const TONE_KEY = "sarathi-active-tone";
+
+const toneOptions: ToneOption[] = [
+  {
+    value: "warm",
+    label: "Warm Companion",
+    gradient: "from-[#FFE5A5] via-[#FFC1DB] to-[#C9F0FF]",
+    icon: "🌤️",
+    tagline: "Soft encouragement with grounded, friendly energy.",
+  },
+  {
+    value: "spiritual",
+    label: "Soulful Guide",
+    gradient: "from-[#D6F2FF] via-[#E8FFEF] to-[#FFF4E2]",
+    icon: "🪷",
+    tagline: "Meditative calm with gentle Gita wisdom woven in.",
+  },
+  {
+    value: "coach",
+    label: "Gentle Coach",
+    gradient: "from-[#FFE9C3] via-[#EAF0FF] to-[#FFE2F4]",
+    icon: "⚡",
+    tagline: "Clear, focused nudges that still feel caring and light.",
+  },
+];
+
+const personaLabels: Record<ToneValue, string> = {
+  warm: "warm companion",
+  spiritual: "soulful guide",
+  coach: "gentle coach",
+};
+
+function getToneGlow(tone: ToneValue) {
+  switch (tone) {
+    case "spiritual":
+      return "radial-gradient(110% 110% at 15% 20%, rgba(209, 231, 255, 0.75), rgba(215, 255, 240, 0.16) 65%)";
+    case "coach":
+      return "radial-gradient(110% 110% at 80% 15%, rgba(201, 240, 255, 0.7), rgba(255, 234, 215, 0.18) 60%)";
+    default:
+      return "radial-gradient(125% 125% at 50% 10%, rgba(255, 224, 181, 0.72), rgba(255, 201, 219, 0.2) 62%)";
+  }
+}
 
 const IconMic = () => (
   <svg
@@ -48,42 +101,113 @@ const IconAlert = () => (
   </svg>
 );
 
-const IconBack = () => (
-  <svg
-    width="28"
-    height="28"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <polyline points="15 18 9 12 15 6" />
-    <line x1="21" y1="12" x2="9" y2="12" />
-  </svg>
-);
-
 export default function VoicePage() {
-  const router = useRouter();
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusLabel, setStatusLabel] = useState("Tap to Speak");
+  const [tone, setTone] = useState<ToneValue>("warm");
+  const [profileName, setProfileName] = useState("");
+  const [toneMenuOpen, setToneMenuOpen] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const toneButtonRef = useRef<HTMLButtonElement | null>(null);
+  const toneMenuRef = useRef<HTMLDivElement | null>(null);
+  const recordingMimeTypeRef = useRef<string>("audio/webm");
+
+  const activeTone =
+    toneOptions.find((option) => option.value === tone) ?? toneOptions[0];
+  const toneGlow = getToneGlow(activeTone.value);
 
   useEffect(() => {
     const labelMap: Record<Status, string> = {
       idle: "Tap to Speak",
       recording: "Listening... (Tap to stop)",
       processing: "Thinking...",
-      speaking: "Speaking... (Tap to stop)",
+      speaking: `Speaking as ${activeTone.label}`,
       error: "Error",
     };
     setStatusLabel(labelMap[status]);
-  }, [status]);
+  }, [status, activeTone.label]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const storedTone = window.localStorage.getItem(TONE_KEY);
+      const storedProfile = window.localStorage.getItem(PROFILE_KEY);
+      if (
+        storedTone &&
+        toneOptions.some((option) => option.value === storedTone)
+      ) {
+        setTone(storedTone as ToneValue);
+      }
+
+      if (storedProfile) {
+        const parsed = JSON.parse(storedProfile) as {
+          name?: string;
+          tone?: ToneValue;
+        };
+        if (parsed?.name) {
+          setProfileName(parsed.name);
+        }
+        if (
+          !storedTone &&
+          parsed?.tone &&
+          toneOptions.some((option) => option.value === parsed.tone)
+        ) {
+          setTone(parsed.tone as ToneValue);
+        }
+      }
+    } catch {
+      /* ignore malformed storage */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!toneMenuOpen) return;
+    const handlePointer = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (
+        toneMenuRef.current?.contains(target) ||
+        toneButtonRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setToneMenuOpen(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setToneMenuOpen(false);
+    };
+
+    window.addEventListener("pointerdown", handlePointer);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointer);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [toneMenuOpen]);
+
+  const persistTone = (value: ToneValue) => {
+    setTone(value);
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(TONE_KEY, value);
+      const storedProfile = window.localStorage.getItem(PROFILE_KEY);
+      if (storedProfile) {
+        const parsed = JSON.parse(storedProfile) as Record<string, unknown>;
+        const nextProfile = {
+          ...parsed,
+          tone: value,
+        };
+        window.localStorage.setItem(PROFILE_KEY, JSON.stringify(nextProfile));
+      }
+    } catch {
+      /* ignore storage write issues */
+    }
+  };
 
   const stopAiPlayback = () => {
     if (audioPlayerRef.current) {
@@ -93,55 +217,109 @@ export default function VoicePage() {
     setStatus("idle");
   };
 
-  const handleBack = () => {
-    if (status === "speaking") stopAiPlayback();
-    if (status === "recording") mediaRecorderRef.current?.stop();
-    router.back();
-  };
-
   const startRecording = async () => {
     setErrorMessage("");
-    setStatus("recording");
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Microphone access is not supported in this browser.");
+      }
+
+      if (typeof MediaRecorder === "undefined") {
+        throw new Error("Voice capture is not available on this browser yet.");
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      const preferredMimeTypes = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/aac",
+      ];
+
+      const selectedMimeType = preferredMimeTypes.find((type) =>
+        MediaRecorder.isTypeSupported(type)
+      );
+
+      if (!selectedMimeType) {
+        throw new Error("Recording format not supported on this device yet.");
+      }
+
+      recordingMimeTypeRef.current = selectedMimeType;
+      mediaRecorderRef.current = new MediaRecorder(stream, {
+        mimeType: selectedMimeType,
+        audioBitsPerSecond: 128000,
+      });
       audioChunksRef.current = [];
 
-      mediaRecorderRef.current.ondataavailable = (e) =>
-        audioChunksRef.current.push(e.data);
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
       mediaRecorderRef.current.onstop = stopRecordingAndProcess;
       mediaRecorderRef.current.start();
-    } catch {
-      setErrorMessage("Please allow microphone access.");
+      setStatus("recording");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Please allow microphone access.";
+      setErrorMessage(message);
       setStatus("error");
     }
   };
 
   const stopRecordingAndProcess = async () => {
     setStatus("processing");
-    const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+    mediaRecorderRef.current?.stream
+      ?.getTracks()
+      .forEach((track) => track.stop());
+    mediaRecorderRef.current = null;
+    const mimeType = recordingMimeTypeRef.current;
+    const audioBlob = new Blob(audioChunksRef.current, {
+      type: mimeType,
+    });
+    audioChunksRef.current = [];
     if (audioBlob.size < 1500) {
       setErrorMessage("I didn't hear anything. Try again.");
       setStatus("error");
       return;
     }
-    const audioFile = new File([audioBlob], "recording.webm");
+    const extension =
+      mimeType.includes("mp4") || mimeType.includes("aac") ? "m4a" : "webm";
+    const audioFile = new File([audioBlob], `recording.${extension}`, {
+      type: mimeType,
+    });
     const formData = new FormData();
     formData.append("audio", audioFile);
+    formData.append("tone", activeTone.value);
+    if (profileName) {
+      formData.append("name", profileName);
+    }
 
     try {
       const res = await fetch("/api/voice", { method: "POST", body: formData });
-      if (!res.ok) throw new Error();
       const result = await res.json();
+      if (!res.ok) {
+        const apiMessage =
+          typeof result?.error === "string" ? result.error : null;
+        throw new Error(apiMessage ?? "Voice reply failed.");
+      }
 
       const audioUrl = `data:${result.audioMimeType};base64,${result.audioBase64}`;
       const audio = new Audio(audioUrl);
       audioPlayerRef.current = audio;
       audio.onplay = () => setStatus("speaking");
       audio.onended = () => setStatus("idle");
-      audio.play();
-    } catch {
-      setErrorMessage("Something went wrong. Try again.");
+      audio.play().catch(() => {
+        audioPlayerRef.current = null;
+        setErrorMessage("Playback was blocked. Tap again to listen.");
+        setStatus("error");
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Something went wrong. Try again.";
+      setErrorMessage(message);
       setStatus("error");
     }
   };
@@ -158,19 +336,20 @@ export default function VoicePage() {
 
   // 🌸 Softer Sarathi color tones
   const colors = {
-    idle: "bg-gradient-to-br from-[#C9E4FF] via-[#F8F4FF] to-[#FFE6CC]",
-    recording: "bg-gradient-to-br from-[#FB7185] via-[#F2A766] to-[#FCD58A]",
-    processing: "bg-gradient-to-br from-[#FFE599] via-[#FCE8D8] to-[#F3D0FF]",
-    speaking: "bg-gradient-to-br from-[#60F1C1] via-[#38BDF8] to-[#A855F7]",
-    error: "bg-gradient-to-br from-[#3F425B] via-[#272846] to-[#0F172A]",
+    idle: "bg-linear-to-br from-[#C9E4FF] via-[#F8F4FF] to-[#FFE6CC]",
+    recording: "bg-linear-to-br from-[#FB7185] via-[#F2A766] to-[#FCD58A]",
+    processing: "bg-linear-to-br from-[#FFE599] via-[#FCE8D8] to-[#F3D0FF]",
+    speaking: "bg-linear-to-br from-[#60F1C1] via-[#38BDF8] to-[#A855F7]",
+    error: "bg-linear-to-br from-[#3F425B] via-[#272846] to-[#0F172A]",
   };
 
+  const persona = personaLabels[activeTone.value] || "warm companion";
   const statusDescriptions: Record<Status, string> = {
-    idle: "Tap the lotus orb to begin your guided exchange.",
-    recording: "Share your truth—Sarathi is listening with grace.",
-    processing: "Wisdom is distilling in the ether. Stay centered.",
-    speaking: "Let Sarathi’s insight flow back like a moonlit tide.",
-    error: "The link trembled—reset and invoke the voice again.",
+    idle: `Choose your vibe, then tap to speak with your ${persona}.`,
+    recording: "Share what's on your mind - I'm listening closely.",
+    processing: "Gathering guidance for you. One breath...",
+    speaking: `Here comes your ${persona} with a grounded reply.`,
+    error: "The connection slipped. Reset and try once more.",
   };
 
   const orbScaleMap: Record<Status, number[] | number> = {
@@ -214,14 +393,6 @@ export default function VoicePage() {
     },
   };
 
-  const orbVariants = {
-    idle: { scale: [1, 1.05, 1], rotate: 0 },
-    recording: { scale: [1, 1.12, 1], rotate: 0 },
-    processing: { scale: 1, rotate: [0, 360] },
-    speaking: { scale: [1, 1.08, 1], rotate: 0 },
-    error: { scale: [1, 1, 1], rotate: 0 },
-  };
-
   const orbIcon =
     status === "recording" || status === "speaking" ? (
       <IconStop />
@@ -235,22 +406,22 @@ export default function VoicePage() {
     <div className="relative flex min-h-screen flex-col items-center justify-between overflow-hidden bg-[#FFF9F2] font-sans text-black">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <motion.div
-          className="absolute -top-40 left-[12%] h-[28rem] w-[24rem] rounded-[6rem] border-4 border-black/70 bg-gradient-to-br from-[#D9EDFF] via-[#F3E4FF] to-[#FFE6D1] shadow-[20px_20px_0_#00000025]"
+          className="absolute -top-40 left-[12%] h-112 w-96 rounded-[6rem] border-4 border-black/70 bg-linear-to-br from-[#D9EDFF] via-[#F3E4FF] to-[#FFE6D1] shadow-[20px_20px_0_#00000025]"
           animate={{ rotate: [0, 4, -3, 0], y: [0, -20, 10, 0] }}
           transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
         />
         <motion.div
-          className="absolute bottom-[-14rem] right-[-6rem] h-[34rem] w-[30rem] rounded-[6rem] border-4 border-black/70 bg-gradient-to-tr from-[#B2F5EA] via-[#C7F0FF] to-[#EAD8FF] shadow-[22px_22px_0_#00000022]"
+          className="absolute -bottom-56 -right-24 h-136 w-120 rounded-[6rem] border-4 border-black/70 bg-linear-to-tr from-[#B2F5EA] via-[#C7F0FF] to-[#EAD8FF] shadow-[22px_22px_0_#00000022]"
           animate={{ rotate: [0, -6, 4, 0], y: [0, -26, 12, 0] }}
           transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
         />
         <motion.div
-          className="absolute left-1/2 top-1/2 h-[1100px] w-[1100px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-[#fef3c7]/45 via-[#fde2ff]/55 to-[#dbeafe]/55 blur-[220px]"
+          className="absolute left-1/2 top-1/2 h-[1100px] w-[1100px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-linear-to-br from-[#fef3c7]/45 via-[#fde2ff]/55 to-[#dbeafe]/55 blur-[220px]"
           animate={{ scale: [0.94, 1.08, 0.98], opacity: [0.4, 0.72, 0.5] }}
           transition={{ duration: 20, repeat: Infinity, repeatType: "mirror" }}
         />
         <motion.div
-          className="absolute left-1/2 top-[22%] hidden h-[10px] w-[18rem] -translate-x-1/2 rounded-full bg-white/70 shadow-[0_0_40px_rgba(255,255,255,0.6)] md:block"
+          className="absolute left-1/2 top-[22%] hidden h-2.5 w-72 -translate-x-1/2 rounded-full bg-white/70 shadow-[0_0_40px_rgba(255,255,255,0.6)] md:block"
           animate={{ opacity: [0.35, 0.85, 0.35], scaleX: [0.7, 1.08, 0.9] }}
           transition={{ duration: 8, repeat: Infinity, repeatType: "mirror" }}
         />
@@ -278,7 +449,7 @@ export default function VoicePage() {
           >
             <Link
               href="/talk"
-              className="flex items-center justify-center rounded-full border-2 border-black bg-gradient-to-r from-[#F4E8FF] via-[#E4F4FF] to-[#FFEED8] px-4 py-1 text-xs font-black uppercase tracking-[0.22em] text-slate-900 shadow-[4px_4px_0_#00000022] sm:px-6 sm:py-2 sm:text-sm"
+              className="flex items-center justify-center rounded-full border-2 border-black bg-linear-to-r from-[#F4E8FF] via-[#E4F4FF] to-[#FFEED8] px-4 py-1 text-xs font-black uppercase tracking-[0.22em] text-slate-900 shadow-[4px_4px_0_#00000022] sm:px-6 sm:py-2 sm:text-sm"
             >
               Talk to Sarathi
             </Link>
@@ -292,7 +463,7 @@ export default function VoicePage() {
           >
             <Link
               href="/journal"
-              className="flex items-center justify-center gap-2 rounded-full border-2 border-black bg-gradient-to-r from-[#CDEBFF] via-[#DFFFE9] to-[#FFE5FB] px-3 py-1 text-[0.7rem] font-black uppercase tracking-[0.2em] text-slate-900 shadow-[4px_4px_0_#00000022] sm:px-5 sm:py-2 sm:text-xs"
+              className="flex items-center justify-center gap-2 rounded-full border-2 border-black bg-linear-to-r from-[#CDEBFF] via-[#DFFFE9] to-[#FFE5FB] px-3 py-1 text-[0.7rem] font-black uppercase tracking-[0.2em] text-slate-900 shadow-[4px_4px_0_#00000022] sm:px-5 sm:py-2 sm:text-xs"
             >
               <NotebookPen className="h-4 w-4" />
               <span className="hidden sm:inline">Journal</span>
@@ -304,10 +475,89 @@ export default function VoicePage() {
       {/* Main */}
       <main className="relative z-20 flex flex-1 flex-col items-center justify-center space-y-8 p-6 text-center">
         <motion.div
-          className="absolute inset-x-0 top-24 mx-auto h-[22rem] w-[22rem] rounded-full bg-gradient-to-br from-[#FFFBF5]/70 via-[#FFF5E4]/60 to-[#FFE3F4]/40 blur-3xl"
+          className="absolute inset-x-0 top-24 mx-auto h-88 w-88 rounded-full bg-linear-to-br from-[#FFFBF5]/70 via-[#FFF5E4]/60 to-[#FFE3F4]/40 blur-3xl"
           animate={{ scale: [0.9, 1.05, 0.95], opacity: [0.4, 0.55, 0.45] }}
           transition={{ duration: 9, repeat: Infinity, repeatType: "mirror" }}
         />
+
+        <div className="relative z-30 flex flex-col items-center gap-2">
+          <motion.button
+            ref={toneButtonRef}
+            type="button"
+            whileHover={{ scale: 1.05, rotate: 0.4 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setToneMenuOpen((prev) => !prev)}
+            aria-haspopup="listbox"
+            aria-expanded={toneMenuOpen}
+            aria-label="Select Sarathi tone"
+            className={`group relative inline-flex items-center gap-2 rounded-full border-[3px] border-slate-900 bg-linear-to-r ${activeTone.gradient} px-3 py-1 text-left text-[0.68rem] font-black uppercase tracking-[0.18em] text-slate-900 shadow-[6px_6px_0_rgba(15,23,42,0.14)] focus:outline-none sm:px-3.5 sm:py-1.5 sm:text-[0.72rem]`}
+          >
+            <motion.span
+              key={`voice-tone-glow-${activeTone.value}`}
+              className="pointer-events-none absolute inset-0 -z-10 rounded-full"
+              initial={{ opacity: 0.3, scale: 0.9 }}
+              animate={{ opacity: 0.55, scale: 1 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              style={{ background: toneGlow }}
+            />
+            <span
+              aria-hidden="true"
+              className="text-base leading-none sm:text-lg"
+            >
+              {activeTone.icon}
+            </span>
+            <span className="truncate">{activeTone.label}</span>
+            <motion.span
+              initial={false}
+              animate={{ rotate: toneMenuOpen ? 180 : 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-900/15 bg-white/80 text-slate-700 sm:h-6 sm:w-6"
+            >
+              <ChevronDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </motion.span>
+          </motion.button>
+
+          <AnimatePresence>
+            {toneMenuOpen && (
+              <motion.div
+                ref={toneMenuRef}
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                role="listbox"
+                aria-label="Voice tone selector"
+                className="absolute top-[calc(100%+0.6rem)] z-40 w-56 max-w-[calc(100vw-3rem)] origin-top rounded-[1.3rem] border-[3px] border-slate-900 bg-white/95 p-1.5 text-left shadow-[10px_10px_0_rgba(15,23,42,0.16)] backdrop-blur-sm sm:w-64"
+              >
+                {toneOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      persistTone(option.value);
+                      setToneMenuOpen(false);
+                    }}
+                    role="option"
+                    aria-selected={tone === option.value}
+                    className={`group flex w-full items-center rounded-2xl border border-transparent px-3 py-1.5 text-left text-[0.7rem] font-bold uppercase tracking-[0.2em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/80 sm:text-[0.74rem] ${
+                      tone === option.value
+                        ? "border-slate-900/20 bg-slate-50/90"
+                        : "hover:border-slate-900/20 hover:bg-slate-50/60"
+                    }`}
+                  >
+                    <span className="truncate text-slate-800">
+                      {option.label}
+                    </span>
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <span className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-slate-500 sm:text-[0.72rem]">
+            {activeTone.tagline}
+          </span>
+        </div>
         <motion.div
           onClick={handleOrbClick}
           animate={{ scale: orbScaleMap[status] }}
@@ -440,7 +690,7 @@ export default function VoicePage() {
               >
                 ✨
               </motion.span>
-              <span className="bg-gradient-to-r from-[#38BDF8] via-[#A855F7] to-[#E879F9] bg-clip-text text-transparent">
+              <span className="bg-linear-to-r from-[#38BDF8] via-[#A855F7] to-[#E879F9] bg-clip-text text-transparent">
                 Resonance
               </span>
               <motion.span

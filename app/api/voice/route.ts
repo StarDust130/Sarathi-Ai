@@ -1,72 +1,177 @@
-import { NextRequest, NextResponse } from "next/server";
-import Groq from "groq-sdk";
-import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
-import fs from "fs";
-import { promises as fsPromises } from "fs";
-import { tmpdir } from "os";
-import path from "path";
-import { Readable } from "stream";
-import { randomUUID } from "crypto";
+import { NextResponse } from "next/server";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const maxDuration = 60;
 
-// Convert ElevenLabs stream to Buffer
-async function elevenLabsResultToBuffer(result: unknown): Promise<Buffer> {
-  if (!result) throw new Error("Empty ElevenLabs response");
-  if (Buffer.isBuffer(result)) return result;
+type ToneValue = "warm" | "spiritual" | "coach";
 
-  if (result instanceof Readable) {
-    const chunks: Buffer[] = [];
-    for await (const chunk of result) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+type TranscriptLanguage = "english" | "hinglish" | "hindi";
+
+const DEFAULT_WHISPER_MODEL = "whisper-large-v3-turbo";
+const DEFAULT_CHAT_MODEL = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+const GROQ_API_BASE =
+  process.env.GROQ_API_BASE?.trim() || "https://api.groq.com/openai/v1";
+
+const VOICE_MAP: Record<ToneValue, string> = {
+  warm: process.env.ELEVENLABS_WARM_VOICE_ID || "CX1mcqJxcZzy2AsgaBjn",
+  spiritual:
+    process.env.ELEVENLABS_SPIRITUAL_VOICE_ID ||
+    process.env.ELEVENLABS_VOICE_ID ||
+    "PLFXYRTU74HpuNdj6oDl",
+  coach: process.env.ELEVENLABS_COACH_VOICE_ID || "ADwIQE9uvyqQvKfuWFE8",
+};
+
+const toneDirections: Record<ToneValue, string> = {
+  warm: "- Sound like a caring, grounded best friend offering solace and validation.\n- Blend practical suggestions with gentle reassurance.",
+  spiritual:
+    "- Echo the wisdom of a serene spiritual guide, referencing nature or the Gita without sounding formal.\n- Keep the energy meditative yet accessible.",
+  coach:
+    "- Speak like a calm mindset coach balancing empathy with focused, doable steps.\n- Encourage steady progress with warm accountability.",
+};
+
+const personaLabels: Record<ToneValue, string> = {
+  warm: "warm companion",
+  spiritual: "soulful guide",
+  coach: "gentle coach",
+};
+
+const tidy = (value: string) => value.replace(/\s+/g, " ").trim();
+
+const clamp = (value: string, max?: number) => {
+  const next = tidy(value);
+  if (!max || next.length <= max) return next;
+  return next.slice(0, max).trim();
+};
+
+const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+};
+
+const getTalkMode = (): "long" | "short" => {
+  const raw = process.env.SARATHI_TALK_MODE;
+  if (!raw) return "long";
+  const normalized = raw.trim().toLowerCase();
+  return normalized === "short" ? "short" : "long";
+};
+
+const detectTranscriptLanguage = (text: string): TranscriptLanguage => {
+  const hasDevanagari = /[\u0900-\u097F]/.test(text);
+  const hasNonAscii = /[^\u0000-\u007F]/.test(text);
+
+  if (hasDevanagari || hasNonAscii) {
+    return "hindi";
+  }
+
+  const lower = text.toLowerCase();
+  const hindiSignals = [
+    "hai",
+    "nahi",
+    "nahin",
+    "tum",
+    "kya",
+    "krishna",
+    "shanti",
+    "achha",
+    "ghar",
+    "man",
+    "dil",
+  ];
+  const englishSignals = ["the", "and", "but", "is", "are", "feel", "help"];
+
+  const hindiScore = hindiSignals.reduce(
+    (score, signal) => (lower.includes(signal) ? score + 1 : score),
+    0
+  );
+  const englishScore = englishSignals.reduce(
+    (score, signal) => (lower.includes(signal) ? score + 1 : score),
+    0
+  );
+
+  if (hindiScore > englishScore) {
+    return "hinglish";
+  }
+
+  return "english";
+};
+
+function resolveTone(rawTone: FormDataEntryValue | null): ToneValue {
+  if (typeof rawTone === "string") {
+    const lowered = rawTone.toLowerCase() as ToneValue;
+    if (lowered === "spiritual" || lowered === "coach" || lowered === "warm") {
+      return lowered;
     }
-    return Buffer.concat(chunks);
   }
-
-  if (typeof (result as any)[Symbol.asyncIterator] === "function") {
-    const chunks: Buffer[] = [];
-    for await (const chunk of result as any) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    }
-    return Buffer.concat(chunks);
-  }
-
-  if (typeof (result as any).arrayBuffer === "function") {
-    return Buffer.from(await (result as any).arrayBuffer());
-  }
-
-  if (typeof (result as any).getReader === "function") {
-    const reader = (result as any).getReader();
-    const parts: Buffer[] = [];
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (value) {
-        const chunk =
-          value instanceof Uint8Array ? value : new Uint8Array(value);
-        parts.push(Buffer.from(chunk));
-      }
-    }
-    return Buffer.concat(parts);
-  }
-
-  throw new Error("Unsupported ElevenLabs response type.");
+  return "warm";
 }
 
-const tidyReply = (input: string) => input.replace(/\s+/g, " ").trim();
-const clampReply = (input: string, max?: number) => {
-  const text = tidyReply(input);
-  if (!max) return text;
-  return text.length <= max ? text : text.slice(0, max).trim();
-};
-const getTalkMode = () =>
-  (process.env.SARATHI_TALK_MODE ?? "long").toString().trim().toLowerCase();
+function buildSystemPrompt({
+  tone,
+  name,
+  talkMode,
+  language,
+}: {
+  tone: ToneValue;
+  name?: string;
+  talkMode: string;
+  language: TranscriptLanguage;
+}) {
+  const persona = personaLabels[tone];
+  const toneGuide = toneDirections[tone];
+  const isLong = talkMode !== "short";
+  const languageGuide: Record<TranscriptLanguage, string> = {
+    english: "Answer fully in English with clear, grounded sentences.",
+    hinglish:
+      "Reply in warm Hinglish using the Latin script, blending Hindi and English words naturally.",
+    hindi:
+      "Respond in natural Hindi using the Devanagari script so it reads like thoughtful conversation.",
+  };
 
-export async function POST(request: NextRequest) {
-  if (!process.env.GROQ_API_KEY || !process.env.ELEVENLABS_API_KEY) {
+  return `
+You are **Sarathi** — a ${persona} inspired by Lord Krishna.
+
+**Language Rule:**
+- ${languageGuide[language]}
+
+**Identity:**
+- You are steady, empathetic, modern, and wise.
+- ${
+    name
+      ? `Respectfully weave ${name} into your support when it adds warmth.`
+      : "Offer companionship even if you do not know their name."
+  }
+- Stay grounded, practical, and poetic without being flowery.
+
+**Tone Preference:**
+${toneGuide}
+
+**Response Style:**
+- Keep it ${
+    isLong ? "2–3 flowing sentences" : "1 soulful sentence"
+  } that is easy to listen to.
+- Keep each sentence under ~18 words so the voice output feels crisp.
+- Invite them to share more when it feels natural.
+
+**Off-Topic Filter:**
+- If they ask for random fun or stray off support topics, gently redirect.
+- Respond with the matching template (translate when needed):
+  * English: "Please ask your question—I am here to help. If you want fun I think you are happy 🙂"
+  * Hinglish/Hindi: "Apna sachcha sawaal batao, main madad ke liye yahan hoon. Agar bas masti karni hai toh mujhe lagta hai tum khush ho 🙂"
+`;
+}
+
+export async function POST(request: Request) {
+  const groqKey = process.env.GROQ_API_KEY;
+  const elevenKey = process.env.ELEVENLABS_API_KEY;
+  if (!groqKey || !elevenKey) {
     return NextResponse.json(
-      { error: "Missing API keys configuration." },
+      { error: "Voice service is missing required API keys." },
       { status: 500 }
     );
   }
@@ -76,155 +181,168 @@ export async function POST(request: NextRequest) {
     const file = formData.get("audio");
     if (!file || !(file instanceof File)) {
       return NextResponse.json(
-        { error: "No audio file provided." },
+        { error: "Audio file not found in request." },
         { status: 400 }
       );
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const tempFilePath = path.join(
-      tmpdir(),
-      `${randomUUID()}-${file.name || "input.webm"}`
+    const tone = resolveTone(formData.get("tone"));
+    const seekerName = tidy(String(formData.get("name") || "")).slice(0, 48);
+
+    const audioForm = new FormData();
+    audioForm.append("file", file, file.name || "audio.webm");
+    audioForm.append("model", DEFAULT_WHISPER_MODEL);
+    audioForm.append("temperature", "0");
+    audioForm.append("response_format", "json");
+
+    const transcriptionRes = await fetch(
+      `${GROQ_API_BASE}/audio/transcriptions`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+        },
+        body: audioForm,
+      }
     );
-    await fsPromises.writeFile(tempFilePath, buffer);
 
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
-    let transcriptText: string | undefined;
-    try {
-      const transcription = await groq.audio.transcriptions.create({
-        file: fs.createReadStream(tempFilePath),
-        model: "whisper-large-v3-turbo",
-        temperature: 0,
-        response_format: "verbose_json",
-      });
-      transcriptText = transcription?.text?.trim();
-    } finally {
-      await fsPromises.unlink(tempFilePath).catch(() => {});
-    }
-
-    if (!transcriptText) {
+    if (!transcriptionRes.ok) {
+      const errText = await transcriptionRes.text().catch(() => "");
+      console.error(
+        "[voice-api] transcription error",
+        transcriptionRes.status,
+        errText
+      );
       return NextResponse.json(
         { error: "Unable to transcribe audio." },
         { status: 422 }
       );
     }
 
-    // ⚙️ Mode toggle (you can switch in .env)
+    const transcriptionJson = (await transcriptionRes.json()) as {
+      text?: string;
+      segments?: Array<{ text?: string }>;
+    };
+    const rawTranscript =
+      transcriptionJson.text ||
+      transcriptionJson.segments
+        ?.map((segment) => segment.text || "")
+        .join(" ") ||
+      "";
+    const transcriptText = tidy(rawTranscript).slice(0, 1600);
+
+    if (!transcriptText) {
+      return NextResponse.json(
+        { error: "I could not hear any words—try again." },
+        { status: 422 }
+      );
+    }
+
     const talkMode = getTalkMode();
-    const isLongMode = talkMode !== "short";
-    const maxChars = isLongMode ? undefined : 100;
-    const lengthHint = isLongMode
-      ? "Long mode is ON. Reply in 2-3 flowing sentences (around 220-320 characters) that feel friendly and quick to listen to."
-      : "Short mode is ON. Reply in a single soulful line under 100 characters.";
+    const isLong = talkMode !== "short";
+    const language = detectTranscriptLanguage(transcriptText);
 
-    // 🎯 Fast + natural Krishna style (Hinglish)
-    const chatCompletion = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
-      temperature: isLongMode ? 0.58 : 0.42,
-      max_completion_tokens: isLongMode ? 220 : 80,
-      top_p: 0.88,
-      messages: [
-        {
-          role: "system",
-          content: `
-You are Sarathi AI — Krishna speaking to a dear friend in easy Hinglish.
-Start with gentle reassurance (“Koi baat nahi, main yahin hoon.”).
-Share practical, uplifting guidance and invite them to keep opening up.
-Weave in a light Bhagavad Gita hint when it truly helps (“Gita 2.47 yaad dilati hai…”).
-Keep the vibe hopeful, grounded, and non-preachy.
-If the friend sounds cheerful, celebrate that mood and suggest what else you both can explore.
-${lengthHint}
-          `,
-        },
-        { role: "user", content: transcriptText },
-      ],
+    const systemPrompt = buildSystemPrompt({
+      tone,
+      name: seekerName,
+      talkMode,
+      language,
     });
 
-    const rawReply =
-      chatCompletion?.choices?.[0]?.message?.content ??
-      "Geeta kehti hai, apna kartavya karo bina fal ki chinta ke.";
-    let finalReply = clampReply(rawReply, maxChars);
-
-    if (isLongMode && finalReply.length < 200) {
-      try {
-        const expansion = await groq.chat.completions.create({
-          model: "llama-3.1-8b-instant",
-          temperature: 0.55,
-          max_completion_tokens: 220,
-          top_p: 0.9,
-          messages: [
-            {
-              role: "system",
-              content: `
-You are refining your own Sarathi reply. Expand it to ~220-320 characters, keep the same warmth, Hinglish tone, and guidance. Stay quick, friendly, and conversational.
-            `,
-            },
-            {
-              role: "user",
-              content: `Original reply: "${finalReply}"\nListener said: "${transcriptText}"`,
-            },
-          ],
-        });
-        const expanded = expansion?.choices?.[0]?.message?.content;
-        if (expanded) finalReply = clampReply(expanded, 360);
-      } catch {
-        // keep original if expansion fails
-      }
-    }
-
-    if (!isLongMode && /^[A-Za-z\s.,!?'"-]+$/.test(finalReply)) {
-      try {
-        const translation = await groq.chat.completions.create({
-          model: "llama-3.1-8b-instant",
-          temperature: 0.3,
-          max_completion_tokens: 100,
-          messages: [
-            {
-              role: "system",
-              content:
-                "Convert this English text to warm, emotional Hinglish (mix of Hindi + English, friendly tone, short and natural). Return only text.",
-            },
-            { role: "user", content: finalReply },
-          ],
-        });
-        const translated = translation?.choices?.[0]?.message?.content?.trim();
-        if (translated) finalReply = clampReply(translated, maxChars);
-      } catch {
-        /* ignore */
-      }
-    }
-
-    finalReply = clampReply(finalReply, isLongMode ? 360 : 100);
-
-    const elevenlabs = new ElevenLabsClient({
-      apiKey: process.env.ELEVENLABS_API_KEY!,
+    const completionRes = await fetch(`${GROQ_API_BASE}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${groqKey}`,
+      },
+      body: JSON.stringify({
+        model: DEFAULT_CHAT_MODEL,
+        temperature: isLong ? 0.55 : 0.4,
+        top_p: 0.9,
+        max_tokens: isLong ? 260 : 120,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: transcriptText },
+        ],
+      }),
     });
 
-    const voiceId = process.env.ELEVENLABS_VOICE_ID ?? "PLFXYRTU74HpuNdj6oDl";
+    if (!completionRes.ok) {
+      const errText = await completionRes.text().catch(() => "");
+      console.error(
+        "[voice-api] completion error",
+        completionRes.status,
+        errText
+      );
+      return NextResponse.json(
+        { error: "Unable to craft a reply. Try again." },
+        { status: 502 }
+      );
+    }
+
+    const completionJson = (await completionRes.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const rawReply = completionJson.choices?.[0]?.message?.content;
+    const replyFallback =
+      "Shanti rakho. Jo ho raha hai, wo bhi tumhe kuch sikhane aaya hai.";
+    const reply = rawReply
+      ? clamp(rawReply, isLong ? 420 : 160)
+      : replyFallback;
+
+    const voiceId = VOICE_MAP[tone];
     const outputFormat =
-      process.env.ELEVENLABS_OUTPUT_FORMAT ?? "mp3_44100_128";
+      process.env.ELEVENLABS_OUTPUT_FORMAT?.trim() || "mp3_44100_128";
     const mimeType = outputFormat.includes("mp3") ? "audio/mpeg" : "audio/wav";
 
-    const ttsResult = await elevenlabs.textToSpeech.convert(voiceId, {
-      text: finalReply,
-      modelId: "eleven_multilingual_v2",
-      outputFormat,
-    });
-    const audioBuffer = await elevenLabsResultToBuffer(ttsResult);
+    const ttsRes = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": elevenKey,
+          "Content-Type": "application/json",
+          Accept: mimeType,
+        },
+        body: JSON.stringify({
+          text: reply,
+          model_id: "eleven_multilingual_v2",
+          output_format: outputFormat,
+          voice_settings: {
+            stability: 0.46,
+            similarity_boost: 0.72,
+            style: 0.2,
+            use_speaker_boost: true,
+          },
+        }),
+      }
+    );
+
+    if (!ttsRes.ok) {
+      const errText = await ttsRes.text().catch(() => "");
+      console.error("[voice-api] elevenlabs error", ttsRes.status, errText);
+      return NextResponse.json(
+        { error: "Unable to generate voice reply." },
+        { status: 502 }
+      );
+    }
+
+    const audioBuffer = await ttsRes.arrayBuffer();
+    const audioBase64 = arrayBufferToBase64(audioBuffer);
 
     return NextResponse.json({
       transcript: transcriptText,
-      reply: finalReply,
-      audioBase64: audioBuffer.toString("base64"),
+      reply,
+      audioBase64,
       audioMimeType: mimeType,
       mode: talkMode,
+      tone,
+      language,
     });
   } catch (error) {
-    console.error("[voice-api] error", error);
+    console.error("[voice-api] unexpected", error);
     return NextResponse.json(
-      { error: "Voice processing failed." },
+      { error: "Voice processing failed. Please try again." },
       { status: 500 }
     );
   }
