@@ -14,35 +14,9 @@ import {
 
 type MessageAction = { label: string; href: string };
 
-type ChatMessage = {
-  role: "ai" | "user";
-  text: string;
-  variant?: "default" | "tasks";
-  actions?: MessageAction[];
-};
-type ApiChatResponse = {
-  SarthiAi?: unknown;
-  error?: string;
-  tasks?: TaskPayload[];
-};
-
-type QuizQuestion = {
-  id: string;
-  prompt: string;
-  options: string[];
-  helper?: string;
-  allowText?: boolean;
-};
+type Stage = "loading" | "name" | "quiz" | "problem" | "chat";
 
 type QuizAnswer = { id: string; question: string; answer: string };
-
-type ToneOption = {
-  value: string;
-  label: string;
-  helper: string;
-  icon: string;
-  gradient: string;
-};
 
 type TaskPayload = {
   text: string;
@@ -52,9 +26,13 @@ type TaskPayload = {
   done?: boolean;
 };
 
-type StoredTask = TaskPayload & {
+type StoredTask = {
   id: string;
+  text: string;
   done: boolean;
+  karma?: number;
+  category?: string;
+  note?: string;
   createdAt: string;
 };
 
@@ -67,67 +45,75 @@ type UserProfile = {
   lastUpdated: string;
 };
 
-type Stage = "loading" | "name" | "quiz" | "problem" | "chat";
+type ChatMessageVariant = "default" | "tasks";
+
+type ChatMessage = {
+  role: "user" | "ai";
+  text: string;
+  actions?: MessageAction[];
+  variant?: ChatMessageVariant;
+  tasks?: TaskPayload[];
+};
+
+type QuizQuestion = {
+  id: string;
+  prompt: string;
+  options: string[];
+  helper?: string;
+  allowText?: boolean;
+};
+
+type ToneOption = {
+  value: string;
+  label: string;
+  gradient: string;
+  icon: string;
+};
 
 const PROFILE_KEY = "sarathi-profile";
-const TASKS_KEY = "sarathi-journal-tasks";
 const MESSAGES_KEY = "sarathi-chat-messages";
+const TASKS_KEY = "sarathi-journal-tasks";
 
 const toneOptions: ToneOption[] = [
   {
     value: "warm",
-    label: "Warm Friend",
-    helper: "Soft encouragement with gentle reassurance.",
+    label: "Warm Companion",
+    gradient: "from-[#FFE5A5] via-[#FFC1DB] to-[#C9F0FF]",
     icon: "🌤️",
-    gradient: "from-[#FFE0B5] via-[#FFD3C8] to-[#FFC9F1]",
   },
   {
     value: "spiritual",
-    label: "Spiritual Guide",
-    helper: "Meditative reflections inspired by timeless wisdom.",
-    icon: "🕯️",
-    gradient: "from-[#D1E7FF] via-[#E8E9FF] to-[#D7FFF0]",
+    label: "Soulful Guide",
+    gradient: "from-[#D6F2FF] via-[#E8FFEF] to-[#FFF4E2]",
+    icon: "🪷",
   },
   {
     value: "coach",
     label: "Gentle Coach",
-    helper: "Clear next steps with grounded motivation.",
-    icon: "🌱",
-    gradient: "from-[#C9F0FF] via-[#FFE1C4] to-[#FFEAD7]",
+    gradient: "from-[#FFE9C3] via-[#EAF0FF] to-[#FFE2F4]",
+    icon: "⚡",
   },
 ];
 
 const quizQuestions: QuizQuestion[] = [
   {
-    id: "stress",
-    prompt: "How heavy does stress feel right now?",
-    options: ["Light", "Manageable", "Overwhelming"],
-    helper: "Choose what resonates most with today.",
-  },
-  {
-    id: "anxiety",
-    prompt: "How are anxiety or restlessness showing up?",
-    options: ["Calm", "Occasional waves", "Constant hum"],
-  },
-  {
-    id: "mood",
-    prompt: "Where is your mood resting?",
-    options: ["Grounded", "A little low", "Very low"],
+    id: "energy",
+    prompt: "How does your energy feel in this moment?",
+    helper: "Choose what resonates or add your own words",
+    options: ["Tender", "Steady", "Scattered", "Bright"],
+    allowText: true,
   },
   {
     id: "focus",
-    prompt: "What do you most want support with today?",
-    options: [
-      "Stress",
-      "Anxiety",
-      "Low mood",
-      "Sleep",
-      "Relationships",
-      "Work",
-      "Other",
-    ],
+    prompt: "Which area of life is asking for the most love today?",
+    options: ["Body", "Heart", "Mind", "Work"],
     allowText: true,
-    helper: "Pick one, and add a note if you'd like.",
+  },
+  {
+    id: "support",
+    prompt: "What kind of support would feel nourishing right now?",
+    options: ["Clarity", "Encouragement", "Grounding", "Surprise me"],
+    allowText: true,
   },
 ];
 
@@ -181,6 +167,7 @@ export default function ChatPage() {
     }
 
     setProfile(nextProfile);
+
     const storedMessages = window.sessionStorage.getItem(MESSAGES_KEY);
     if (storedMessages) {
       const hydrated = sanitizeStoredMessages(storedMessages);
@@ -188,6 +175,7 @@ export default function ChatPage() {
         setMessages(hydrated);
       }
     }
+
     const answered = nextProfile.quizAnswers.length;
     if (!nextProfile.name) {
       setStage("name");
@@ -199,6 +187,7 @@ export default function ChatPage() {
     } else {
       setStage("chat");
     }
+
     setProfileLoaded(true);
     setMessagesHydrated(true);
   }, []);
@@ -208,12 +197,8 @@ export default function ChatPage() {
 
     setMessages((prev) => {
       if (prev.length > 0) return prev;
-      const initial: ChatMessage[] = [
-        {
-          role: "ai",
-          text: "🌸 Namaste! I am your Sarathi — your companion on the path of calm and clarity.",
-        },
-      ];
+
+      const initial: ChatMessage[] = [];
 
       if (stage === "name") {
         initial.push({
@@ -232,7 +217,7 @@ export default function ChatPage() {
             profile?.name ? `, ${profile.name}` : ""
           }. Share what's resting on your heart in your own words.`,
         });
-      } else {
+      } else if (stage === "chat") {
         initial.push({
           role: "ai",
           text: profile?.name
@@ -499,9 +484,13 @@ export default function ChatPage() {
           throw new Error(data.error);
         }
 
+        const chatTasks = normalizeTaskPayloads(
+          Array.isArray(data?.tasks) ? (data.tasks as TaskPayload[]) : undefined
+        );
+
         let actions: MessageAction[] | undefined;
-        if (Array.isArray(data?.tasks) && data.tasks.length > 0) {
-          saveTasksToJournal(data.tasks);
+        if (chatTasks.length > 0) {
+          saveTasksToJournal(Array.isArray(data?.tasks) ? data.tasks : []);
           actions = [
             {
               label: "View Journal",
@@ -515,15 +504,17 @@ export default function ChatPage() {
             ? data.SarthiAi
             : String(data?.SarthiAi || "No reply from AI.");
 
-        const reply = actions
-          ? `${rawReply}\n\nI've saved these gentle tasks in your journal. Tap "View Journal" whenever you're ready.`
-          : rawReply;
+        const reply =
+          chatTasks.length > 0
+            ? `${rawReply}\n\nI've saved these gentle tasks in your journal. Tap "View Journal" whenever you're ready.`
+            : rawReply;
 
         const nextMessage: ChatMessage = {
           role: "ai",
           text: reply,
           actions,
-          variant: actions ? "tasks" : "default",
+          variant: chatTasks.length > 0 ? "tasks" : "default",
+          tasks: chatTasks.length > 0 ? chatTasks : undefined,
         };
 
         setMessages((prev) => [...prev, nextMessage]);
@@ -636,11 +627,20 @@ export default function ChatPage() {
           {messages.map((m, i) => {
             const isAI = m.role === "ai";
             const containsCode = /```/.test(m.text);
-            const content = containsCode
-              ? renderCodeBlock(m.text)
-              : renderMessageSegments(m.text, isAI);
             const variant =
               m.variant ?? (m.actions?.length ? "tasks" : "default");
+            const hasTasks =
+              variant === "tasks" &&
+              isAI &&
+              Array.isArray(m.tasks) &&
+              m.tasks.length > 0;
+            const content = containsCode
+              ? renderCodeBlock(m.text)
+              : renderMessageSegments(
+                  m.text,
+                  isAI,
+                  !hasTasks && variant === "tasks"
+                );
             const bubbleClasses = isAI
               ? containsCode
                 ? "border-slate-900/80 bg-[#1F1D3A] font-mono whitespace-pre-wrap text-white shadow-none"
@@ -660,7 +660,58 @@ export default function ChatPage() {
                 <div
                   className={`max-w-[78%] rounded-[1.6rem] border-[3px] px-4 py-3 text-[0.9rem] font-medium leading-relaxed shadow-[8px_8px_0_rgba(15,23,42,0.1)] sm:max-w-[68%] sm:px-6 sm:py-4 sm:text-[0.95rem] ${bubbleClasses}`}
                 >
+                  {hasTasks ? (
+                    <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border-2 border-slate-900/15 bg-linear-to-r from-white/85 via-[#F3F5FF]/85 to-white/85 px-3 py-1.5 text-[0.62rem] font-bold uppercase tracking-[0.2em] text-slate-700 shadow-[3px_3px_0_rgba(15,23,42,0.08)]">
+                      <span className="inline-flex items-center gap-1.5 text-slate-800">
+                        <Sparkles className="h-3.5 w-3.5 text-[#6174D9]" />
+                        Fresh Tasks from Sarathi
+                      </span>
+                      <span className="rounded-full border border-[#4050C7]/15 bg-[#E6ECFF]/80 px-2 py-0.5 text-[0.58rem] font-semibold text-[#3647B7]">
+                        In Journal
+                      </span>
+                    </div>
+                  ) : null}
                   <div className="space-y-2">{content}</div>
+                  {hasTasks ? (
+                    <div className="mt-3 space-y-2">
+                      {m.tasks?.map((task, taskIndex) => (
+                        <motion.div
+                          key={`${m.role}-${i}-task-${taskIndex}`}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{
+                            duration: 0.24,
+                            delay: taskIndex * 0.05,
+                          }}
+                          className="rounded-2xl border-2 border-[#4D5ADB]/25 bg-linear-to-br from-[#F7F8FF]/95 via-white/95 to-[#F9F5FF]/95 px-3.5 py-2.5 shadow-[4px_4px_0_rgba(15,23,42,0.1)]"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="text-[0.9rem] font-semibold text-[#1B2659]">
+                              {task.text}
+                            </span>
+                            {typeof task.karma === "number" ? (
+                              <span className="rounded-full border border-[#4D5ADB]/30 bg-[#E6E9FF]/80 px-2 py-0.5 text-[0.56rem] font-bold uppercase tracking-[0.16em] text-[#2F3A8C]">
+                                +{task.karma} Karma
+                              </span>
+                            ) : null}
+                          </div>
+                          {task.note ? (
+                            <p className="mt-1.5 text-[0.78rem] font-medium leading-relaxed text-[#24326F]">
+                              {task.note}
+                            </p>
+                          ) : null}
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[0.56rem] font-semibold uppercase tracking-[0.2em] text-[#5C6AE5]">
+                            {task.category ? (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-[#4D5ADB]/25 bg-[#E6EAFF]/85 px-2 py-0.5">
+                                <Sparkles className="h-3 w-3 text-[#5C6AE5]" />
+                                {formatTaskCategory(task.category)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : null}
                   {Array.isArray(m.actions) && m.actions.length > 0 ? (
                     <div className="mt-4 flex flex-wrap gap-2">
                       {m.actions.map((action, actionIndex) => (
@@ -733,7 +784,7 @@ export default function ChatPage() {
           whileTap={{ scale: 0.93 }}
         >
           <ChevronDown className="h-4 w-4" />
-          <span className="hidden md:block">Latest</span>
+          <span className="hidden md:block">Go Back</span>
         </motion.button>
       )}
 
@@ -863,7 +914,7 @@ export default function ChatPage() {
               onBlur={() => setInputFocused(false)}
               placeholder={inputPlaceholder}
               rows={1}
-              className="max-h-52 min-h-[2.75rem] w-full resize-none rounded-2xl border border-transparent bg-transparent px-3.5 py-2 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-slate-300 focus:shadow-[0_0_0_2px_rgba(15,23,42,0.12)] sm:min-h-[3.5rem] sm:px-4 sm:py-2.5 sm:text-base"
+              className="max-h-52 min-h-11 w-full resize-none rounded-2xl border border-transparent bg-transparent px-3.5 py-2 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-slate-300 focus:shadow-[0_0_0_2px_rgba(15,23,42,0.12)] sm:min-h-14 sm:px-4 sm:py-2.5 sm:text-base"
               disabled={isTyping || stage === "quiz"}
             />
             <button
@@ -976,13 +1027,23 @@ function sanitizeStoredMessages(raw: string): ChatMessage[] {
               .filter(Boolean)
           : undefined;
 
-        const variant = candidate.variant === "tasks" ? "tasks" : undefined;
+        const tasks = normalizeTaskPayloads(
+          Array.isArray(candidate.tasks)
+            ? (candidate.tasks as TaskPayload[])
+            : undefined
+        );
+
+        const variant =
+          candidate.variant === "tasks" || tasks.length > 0
+            ? "tasks"
+            : undefined;
 
         return {
           role,
           text,
           actions: actions && actions.length > 0 ? actions : undefined,
           variant,
+          tasks: tasks.length > 0 ? tasks : undefined,
         } as ChatMessage;
       })
       .filter((message): message is ChatMessage => Boolean(message));
@@ -1010,7 +1071,11 @@ function renderCodeBlock(text: string) {
   );
 }
 
-function renderMessageSegments(text: string, isAI: boolean) {
+function renderMessageSegments(
+  text: string,
+  isAI: boolean,
+  highlightTasks = false
+) {
   const cleanText = text.trim();
   if (!cleanText) {
     return <span>{text}</span>;
@@ -1021,14 +1086,14 @@ function renderMessageSegments(text: string, isAI: boolean) {
     return <span>{cleanText}</span>;
   }
 
-  return segments.map((segment, index) => {
+  return segments.map((segment: MessageSegment, index: number) => {
     if (segment.type === "paragraph") {
       return (
         <p
           key={`paragraph-${index}`}
           className="mb-1.5 last:mb-0 leading-relaxed"
         >
-          {segment.lines.map((line, lineIndex) => (
+          {segment.lines.map((line: string, lineIndex: number) => (
             <span key={`line-${index}-${lineIndex}`}>
               {line}
               {lineIndex < segment.lines.length - 1 ? <br /> : null}
@@ -1040,23 +1105,37 @@ function renderMessageSegments(text: string, isAI: boolean) {
 
     if (segment.type === "ordered-list") {
       return (
-        <ol key={`ordered-${index}`} className="space-y-2 pt-1">
-          {segment.lines.map((line, itemIndex) => (
+        <ol key={`ordered-${index}`} className="space-y-1.5 pt-0.5">
+          {segment.lines.map((line: string, itemIndex: number) => (
             <motion.li
               key={`ordered-${index}-${itemIndex}`}
-              className="relative flex items-start gap-3 rounded-2xl border border-slate-900/10 bg-white/85 px-4 py-2 text-left text-slate-800 shadow-[4px_4px_0_rgba(15,23,42,0.06)]"
+              className={`relative flex items-start gap-2.5 rounded-xl border px-3.5 py-2 text-left shadow-[3px_3px_0_rgba(15,23,42,0.05)] transition-colors ${
+                highlightTasks
+                  ? "border-[#4F59CE]/30 bg-linear-to-br from-[#F3F5FF]/95 via-[#F9FBFF]/95 to-white text-[#202B5A]"
+                  : "border-slate-900/8 bg-white/90 text-slate-700"
+              }`}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.22, delay: itemIndex * 0.04 }}
             >
               <span
-                className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-900/15 bg-linear-to-br from-[#FDF5FF] via-[#E4F0FF] to-[#FFF2E0] text-[0.65rem] font-bold text-slate-700 ${
-                  isAI ? "shadow-[0_3px_0_rgba(15,23,42,0.12)]" : ""
+                className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-900/10 bg-linear-to-br from-[#F9F0FF] via-[#E8F2FF] to-[#FFECD8] text-[0.7rem] font-semibold text-slate-600 ${
+                  highlightTasks
+                    ? "border-[#4A54C4]/35 bg-linear-to-br from-[#E6EAFF] via-[#F3F5FF] to-[#FFEBD6] text-[#2E3990]"
+                    : isAI
+                    ? "shadow-[0_2px_0_rgba(15,23,42,0.08)]"
+                    : ""
                 }`}
               >
                 {itemIndex + 1}
               </span>
-              <span className="leading-relaxed">{line}</span>
+              <span
+                className={`leading-relaxed text-[0.95rem] ${
+                  highlightTasks ? "font-medium" : ""
+                }`}
+              >
+                {line}
+              </span>
             </motion.li>
           ))}
         </ol>
@@ -1064,19 +1143,35 @@ function renderMessageSegments(text: string, isAI: boolean) {
     }
 
     return (
-      <ul key={`unordered-${index}`} className="space-y-2 pt-1">
-        {segment.lines.map((line, itemIndex) => (
+      <ul key={`unordered-${index}`} className="space-y-1.5 pt-0.5">
+        {segment.lines.map((line: string, itemIndex: number) => (
           <motion.li
             key={`unordered-${index}-${itemIndex}`}
-            className="relative flex items-start gap-3 rounded-2xl border border-slate-900/10 bg-white/85 px-4 py-2 text-left text-slate-800 shadow-[4px_4px_0_rgba(15,23,42,0.06)]"
+            className={`relative flex items-start gap-2.5 rounded-xl border px-3.5 py-2 text-left shadow-[3px_3px_0_rgba(15,23,42,0.05)] transition-colors ${
+              highlightTasks
+                ? "border-[#4F59CE]/30 bg-linear-to-br from-[#F3F5FF]/95 via-[#F9FBFF]/95 to-white text-[#202B5A]"
+                : "border-slate-900/8 bg-white/90 text-slate-700"
+            }`}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.22, delay: itemIndex * 0.05 }}
           >
-            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#FFD8F6] via-[#E7F2FF] to-[#FFE8CC] text-[0.65rem] font-semibold text-slate-700">
+            <span
+              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.62rem] font-medium ${
+                highlightTasks
+                  ? "bg-linear-to-br from-[#E7EAFF] via-[#F3F5FF] to-[#FFEAD9] text-[#2E3990]"
+                  : "bg-linear-to-br from-[#FFE3F7] via-[#EEF5FF] to-[#FFEED9] text-slate-600"
+              }`}
+            >
               ✶
             </span>
-            <span className="leading-relaxed">{line}</span>
+            <span
+              className={`leading-relaxed text-[0.95rem] ${
+                highlightTasks ? "font-medium" : ""
+              }`}
+            >
+              {line}
+            </span>
           </motion.li>
         ))}
       </ul>
@@ -1164,6 +1259,38 @@ function sanitizeName(value: string) {
   return value.replace(/[^\p{L}\p{N}\s'\-]/gu, "").trim();
 }
 
+function normalizeTaskPayloads(tasks?: TaskPayload[]): TaskPayload[] {
+  if (!Array.isArray(tasks)) return [];
+  return tasks
+    .map((task) => {
+      if (!task || typeof task.text !== "string") return null;
+      const text = task.text.trim().slice(0, 120);
+      if (!text) return null;
+      const category =
+        typeof task.category === "string" && task.category.trim()
+          ? task.category.trim().slice(0, 32)
+          : undefined;
+      const note =
+        typeof task.note === "string" && task.note.trim()
+          ? task.note.trim().slice(0, 120)
+          : undefined;
+      const karma =
+        typeof task.karma === "number"
+          ? Math.max(1, Math.round(task.karma))
+          : 10;
+
+      return {
+        text,
+        karma,
+        category,
+        note,
+        done: Boolean(task.done),
+      } as TaskPayload;
+    })
+    .filter((task): task is TaskPayload => Boolean(task))
+    .slice(0, 3);
+}
+
 function loadTasksForContext(): TaskPayload[] {
   const stored = loadStoredTasks();
   return stored.slice(0, 12).map((task) => ({
@@ -1204,30 +1331,12 @@ function loadStoredTasks(): StoredTask[] {
 
 function saveTasksToJournal(tasks: TaskPayload[]) {
   if (typeof window === "undefined") return;
-  const valid = tasks
-    .filter((task) => typeof task?.text === "string")
-    .map((task) => ({
-      text: task.text.trim().slice(0, 120),
-      karma:
-        typeof task?.karma === "number"
-          ? Math.max(1, Math.round(task.karma))
-          : 10,
-      category:
-        typeof task?.category === "string"
-          ? task.category.slice(0, 32)
-          : undefined,
-      note:
-        typeof task?.note === "string"
-          ? task.note.trim().slice(0, 120)
-          : undefined,
-    }))
-    .slice(0, 3);
-
-  if (valid.length === 0) return;
+  const normalized = normalizeTaskPayloads(tasks);
+  if (normalized.length === 0) return;
 
   const existing = loadStoredTasks();
   const timestamp = Date.now();
-  const prepared: StoredTask[] = valid.map((task, index) => ({
+  const prepared: StoredTask[] = normalized.map((task, index) => ({
     id: `task-${timestamp}-${index}`,
     text: task.text,
     karma: task.karma,
@@ -1245,6 +1354,18 @@ function saveTasksToJournal(tasks: TaskPayload[]) {
   ];
 
   window.localStorage.setItem(TASKS_KEY, JSON.stringify(merged));
+}
+
+function formatTaskCategory(value?: string) {
+  if (!value) return "";
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map(
+      (fragment) =>
+        fragment.charAt(0).toUpperCase() + fragment.slice(1).toLowerCase()
+    )
+    .join(" ");
 }
 
 type QuizCardProps = {

@@ -138,7 +138,11 @@ ${
 **REPLY LENGTH:**
 * **Length:** ${isLong ? "3–5 soothing lines" : "1–2 short, calm lines"}
 
-${requestTasks ? getTaskPromptAddendum() : ""}
+${
+  requestTasks
+    ? getTaskPromptAddendum({ safeName, problemSummary, quizSummary })
+    : ""
+}
 `;
     // --- 💡 FIX END ---
 
@@ -207,10 +211,28 @@ function getToneDirections(tone: string) {
   return guides[tone] ?? guides.warm;
 }
 
-function getTaskPromptAddendum() {
+function getTaskPromptAddendum({
+  safeName,
+  problemSummary,
+  quizSummary,
+}: {
+  safeName: string;
+  problemSummary: string;
+  quizSummary: string;
+}) {
+  const focusLine = problemSummary
+    ? `- Anchor every task in this immediate focus: ${problemSummary}`
+    : quizSummary
+    ? `- Use their latest check-in cues: ${quizSummary}`
+    : "- They haven't shared specifics yet, so choose universally grounding micro-steps.";
+
+  const nameLine = safeName
+    ? `- Weave ${safeName}'s name softly in the reply if it adds warmth.`
+    : "";
+
   return `
 **TASK GENERATION MODE (DEVELOPER INSTRUCTION):**
-- The user specifically asked for gentle daily tasks. Reply with JSON enclosed in a Markdown code fence using this structure:
+- The user specifically asked for gentle daily tasks. Reply with JSON enclosed in a Markdown code fence using this exact structure:
 
 \`\`\`json
 {
@@ -226,8 +248,14 @@ function getTaskPromptAddendum() {
 }
 \`\`\`
 
-- Provide 3 tasks at most. Keep each task under 80 characters. Ensure the JSON is valid. No prose outside the JSON block.
-- Mention in the "reply" line that these tasks are saved in their journal so they can revisit them later.
+${focusLine}
+- Each task must respond directly to what they're moving through today—no generic productivity chores.
+- Tailor intensity to their bandwidth; keep actions compassionate, specific, and achievable in one sitting.
+- Provide 3 tasks at most. Keep each task under 80 characters and ensure categories match the allowed list.
+- Use the "note" field to tie the task back to their focus or emotional state.
+- The "reply" value must be 1–2 warm sentences (no bullet points or numbering) explaining how these tasks support them and noting that they're saved in the journal. ${nameLine}
+- Match the user's language (English vs Hinglish/Hindi) exactly as instructed above.
+- Output valid JSON only; no prose outside the code fence.
 `;
 }
 

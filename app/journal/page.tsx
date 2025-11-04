@@ -34,27 +34,7 @@ const moodOptions = [
 ];
 
 const defaultTasks: Task[] = [
-  {
-    id: "task-1",
-    text: "Note three gratitudes",
-    done: false,
-    karma: 8,
-    category: "mind",
-  },
-  {
-    id: "task-2",
-    text: "Move or stretch for 5 minutes",
-    done: false,
-    karma: 8,
-    category: "body",
-  },
-  {
-    id: "task-3",
-    text: "Drink a glass of water",
-    done: false,
-    karma: 6,
-    category: "body",
-  },
+
 ];
 
 const getDefaultTasks = (): Task[] =>
