@@ -17,7 +17,14 @@ type Task = {
   id: string;
   text: string;
   done: boolean;
+  karma?: number;
+  category?: string;
+  note?: string;
+  createdAt?: string;
 };
+
+const ENTRIES_KEY = "sarathi-journal-entries";
+const TASKS_KEY = "sarathi-journal-tasks";
 
 const moodOptions = [
   { label: "Centered", emoji: "🪷" },
@@ -27,10 +34,94 @@ const moodOptions = [
 ];
 
 const defaultTasks: Task[] = [
-  { id: "task-1", text: "Note three gratitudes", done: false },
-  { id: "task-2", text: "Move or stretch for 5 minutes", done: false },
-  { id: "task-3", text: "Drink a glass of water", done: false },
+  {
+    id: "task-1",
+    text: "Note three gratitudes",
+    done: false,
+    karma: 8,
+    category: "mind",
+  },
+  {
+    id: "task-2",
+    text: "Move or stretch for 5 minutes",
+    done: false,
+    karma: 8,
+    category: "body",
+  },
+  {
+    id: "task-3",
+    text: "Drink a glass of water",
+    done: false,
+    karma: 6,
+    category: "body",
+  },
 ];
+
+const getDefaultTasks = (): Task[] =>
+  defaultTasks.map((task, index) => ({
+    ...task,
+    id: `${task.id}-${index}`,
+    createdAt: new Date().toISOString(),
+  }));
+
+const parseStoredEntries = (raw: string | null): JournalEntry[] => {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => ({
+        id:
+          typeof entry?.id === "string"
+            ? entry.id
+            : `entry-${Math.random().toString(16).slice(2)}`,
+        body: typeof entry?.body === "string" ? entry.body : "",
+        mood:
+          typeof entry?.mood === "string" ? entry.mood : moodOptions[0].label,
+        highlight: typeof entry?.highlight === "string" ? entry.highlight : "",
+        createdAt:
+          typeof entry?.createdAt === "string"
+            ? entry.createdAt
+            : new Date().toISOString(),
+      }))
+      .filter((entry) => entry.body.trim() || entry.highlight.trim());
+  } catch {
+    return [];
+  }
+};
+
+const parseStoredTasks = (raw: string | null): Task[] => {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const timestamp = Date.now();
+    return parsed
+      .map((task, index) => ({
+        id:
+          typeof task?.id === "string" ? task.id : `task-${timestamp}-${index}`,
+        text: typeof task?.text === "string" ? task.text : "",
+        done: Boolean(task?.done),
+        karma:
+          typeof task?.karma === "number"
+            ? Math.max(0, Math.round(task.karma))
+            : undefined,
+        category:
+          typeof task?.category === "string"
+            ? task.category.slice(0, 32)
+            : undefined,
+        note:
+          typeof task?.note === "string" ? task.note.slice(0, 160) : undefined,
+        createdAt:
+          typeof task?.createdAt === "string"
+            ? task.createdAt
+            : new Date().toISOString(),
+      }))
+      .filter((task) => task.text.trim());
+  } catch {
+    return [];
+  }
+};
 
 const entryScopes = [
   { label: "Today", value: "today" as const },
@@ -53,12 +144,23 @@ const formatDate = (iso: string) =>
   }).format(new Date(iso));
 
 const JournalPage = () => {
-  const [entries, setEntries] = useState<JournalEntry[]>([]);
-  const [tasks, setTasks] = useState<Task[]>(defaultTasks);
+  const [entries, setEntries] = useState<JournalEntry[]>(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+    return parseStoredEntries(window.localStorage.getItem(ENTRIES_KEY));
+  });
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    if (typeof window === "undefined") {
+      return getDefaultTasks();
+    }
+    const stored = window.localStorage.getItem(TASKS_KEY);
+    const parsed = parseStoredTasks(stored);
+    return parsed.length > 0 ? parsed : getDefaultTasks();
+  });
   const [draft, setDraft] = useState("");
   const [mood, setMood] = useState(moodOptions[0].label);
   const [highlight, setHighlight] = useState("");
-  const [newTask, setNewTask] = useState("");
   const [entryScope, setEntryScope] = useState<"today" | "all">("today");
   const [taskFilter, setTaskFilter] = useState<"active" | "all" | "completed">(
     "active"
@@ -67,33 +169,27 @@ const JournalPage = () => {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const storedEntries = localStorage.getItem("sarathi-journal-entries");
-    const storedTasks = localStorage.getItem("sarathi-journal-tasks");
-    if (storedEntries) {
-      try {
-        setEntries(JSON.parse(storedEntries));
-      } catch {
-        setEntries([]);
-      }
-    }
-    if (storedTasks) {
-      try {
-        setTasks(JSON.parse(storedTasks));
-      } catch {
-        setTasks(defaultTasks);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem("sarathi-journal-entries", JSON.stringify(entries));
+    window.localStorage.setItem(ENTRIES_KEY, JSON.stringify(entries));
   }, [entries]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem("sarathi-journal-tasks", JSON.stringify(tasks));
+    window.localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
   }, [tasks]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === TASKS_KEY) {
+        setTasks(parseStoredTasks(event.newValue));
+      }
+      if (event.key === ENTRIES_KEY) {
+        setEntries(parseStoredEntries(event.newValue));
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   const todayEntries = useMemo(
     () =>
@@ -114,6 +210,11 @@ const JournalPage = () => {
     [tasks]
   );
   const completedTaskCount = tasks.length - activeTaskCount;
+  const totalKarma = useMemo(
+    () =>
+      tasks.reduce((sum, task) => sum + (task.done ? task.karma ?? 5 : 0), 0),
+    [tasks]
+  );
 
   const filteredTasks = useMemo(() => {
     if (taskFilter === "active") {
@@ -150,15 +251,6 @@ const JournalPage = () => {
     );
   };
 
-  const handleAddTask = () => {
-    if (!newTask.trim()) return;
-    setTasks((prev) => [
-      ...prev,
-      { id: `task-${Date.now()}`, text: newTask.trim(), done: false },
-    ]);
-    setNewTask("");
-  };
-
   const toggleEntryExpansion = (id: string) => {
     setExpandedEntryIds((prev) =>
       prev.includes(id)
@@ -170,15 +262,15 @@ const JournalPage = () => {
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#E3EEFF] text-slate-900 selection:bg-[#FFE5A5]/70 selection:text-slate-900">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-12 top-16 h-[18rem] w-[18rem] rounded-[5rem] border-4 border-slate-900 bg-gradient-to-br from-[#FBC2EB] via-[#A6C1EE] to-[#8FD3F4] opacity-80 shadow-[18px_18px_0px_rgba(15,23,42,0.28)] animate-glide-slow" />
-        <div className="absolute bottom-[-9rem] right-[-6rem] h-[22rem] w-[22rem] rounded-[6rem] border-4 border-slate-900 bg-gradient-to-br from-[#FFC3A0] via-[#FFAFBD] to-[#FBD786] shadow-[18px_18px_0px_rgba(15,23,42,0.24)] animate-glide-fast" />
+        <div className="absolute -left-12 top-16 h-72 w-72 rounded-[5rem] border-4 border-slate-900 bg-linear-to-br from-[#FBC2EB] via-[#A6C1EE] to-[#8FD3F4] opacity-80 shadow-[18px_18px_0px_rgba(15,23,42,0.28)] animate-glide-slow" />
+        <div className="absolute -bottom-36 -right-24 h-88 w-88 rounded-[6rem] border-4 border-slate-900 bg-linear-to-br from-[#FFC3A0] via-[#FFAFBD] to-[#FBD786] shadow-[18px_18px_0px_rgba(15,23,42,0.24)] animate-glide-fast" />
         <motion.div
-          className="absolute left-1/2 top-1/2 h-[42rem] w-[42rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-tr from-[#FDF2FF]/60 via-[#DDEBFF]/70 to-[#FFF9E6]/65 blur-[140px]"
+          className="absolute left-1/2 top-1/2 h-168 w-2xl -translate-x-1/2 -translate-y-1/2 rounded-full bg-linear-to-tr from-[#FDF2FF]/60 via-[#DDEBFF]/70 to-[#FFF9E6]/65 blur-[140px]"
           animate={{ scale: [1, 1.05, 1], opacity: [0.6, 0.75, 0.6] }}
           transition={{ duration: 14, repeat: Infinity, repeatType: "mirror" }}
         />
         <motion.div
-          className="absolute left-[14%] top-[20%] hidden h-[10rem] w-[10rem] -translate-x-1/2 rounded-[3rem] border-4 border-slate-900 bg-[#FDF6FF]/85 shadow-[14px_14px_0px_rgba(15,23,42,0.22)] sm:block"
+          className="absolute left-[14%] top-[20%] hidden h-40 w-40 -translate-x-1/2 rounded-[3rem] border-4 border-slate-900 bg-[#FDF6FF]/85 shadow-[14px_14px_0px_rgba(15,23,42,0.22)] sm:block"
           animate={{ y: [0, -16, 0], rotate: [0, 8, -4, 0] }}
           transition={{
             duration: 13,
@@ -188,7 +280,7 @@ const JournalPage = () => {
           }}
         />
         <motion.div
-          className="absolute bottom-[18%] right-[15%] h-[8rem] w-[8rem] rounded-full border-4 border-slate-900 bg-[#DAF4FF]/75 shadow-[12px_12px_0px_rgba(15,23,42,0.2)]"
+          className="absolute bottom-[18%] right-[15%] h-32 w-32 rounded-full border-4 border-slate-900 bg-[#DAF4FF]/75 shadow-[12px_12px_0px_rgba(15,23,42,0.2)]"
           animate={{ y: [0, 18, 0], scale: [1, 1.06, 1] }}
           transition={{
             duration: 11,
@@ -198,7 +290,7 @@ const JournalPage = () => {
           }}
         />
         <motion.div
-          className="animate-shimmer absolute left-[55%] top-[26%] hidden h-[4px] w-[11rem] rounded-full bg-linear-to-r from-transparent via-white/80 to-transparent md:block"
+          className="animate-shimmer absolute left-[55%] top-[26%] hidden h-1 w-44 rounded-full bg-linear-to-r from-transparent via-white/80 to-transparent md:block"
           animate={{ opacity: [0.2, 0.7, 0.2], scaleX: [0.8, 1.1, 0.8] }}
           transition={{ duration: 6, repeat: Infinity, repeatType: "mirror" }}
         />
@@ -206,15 +298,15 @@ const JournalPage = () => {
 
       <div className="relative z-10 mx-auto flex flex-col gap-10 w-full px-4 pb-24 sm:px-6 lg:px-10">
         <header className="-mx-4 sm:-mx-6 lg:-mx-10">
-          <div className="relative w-full overflow-hidden  border-b-4 border-slate-900 bg-gradient-to-r from-[#F7FAFF]/95 via-[#FFFFFF] to-[#E3F1FF]/95 px-4 py-3 shadow-[10px_10px_0px_rgba(15,23,42,0.24)] backdrop-blur-sm sm:px-6 sm:py-4">
+          <div className="relative w-full overflow-hidden  border-b-4 border-slate-900 bg-linear-to-r from-[#F7FAFF]/95 via-[#FFFFFF] to-[#E3F1FF]/95 px-4 py-3 shadow-[10px_10px_0px_rgba(15,23,42,0.24)] backdrop-blur-sm sm:px-6 sm:py-4">
             <motion.div
               aria-hidden="true"
               initial={{ opacity: 0, y: -12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
-              className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-[40rem] -translate-x-1/2 rounded-full bg-gradient-to-r from-[#FFE5A5]/45 via-transparent to-[#AFDCFF]/45 blur-3xl md:block"
+              className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-160 -translate-x-1/2 rounded-full bg-linear-to-r from-[#FFE5A5]/45 via-transparent to-[#AFDCFF]/45 blur-3xl md:block"
             />
-            <span className="pointer-events-none absolute inset-x-6 bottom-0 h-[3px] rounded-full bg-gradient-to-r from-transparent via-[#FFCD7C] to-transparent sm:inset-x-10" />
+            <span className="pointer-events-none absolute inset-x-6 bottom-0 h-[3px] rounded-full bg-linear-to-r from-transparent via-[#FFCD7C] to-transparent sm:inset-x-10" />
             <div className="relative mx-auto flex w-full max-w-6xl items-center justify-between">
               {/* Left - Back Button */}
               <motion.div whileHover={{ scale: 1.05 }} className="z-10">
@@ -236,7 +328,7 @@ const JournalPage = () => {
               <motion.div whileHover={{ scale: 1.05 }} className="z-10">
                 <Link
                   href="/chat"
-                  className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-slate-900 bg-gradient-to-r from-[#C9F0FF] via-[#E4E8FF] to-[#FFE5F3] px-3 py-1 text-[0.7rem] font-bold uppercase tracking-[0.2em] text-slate-900 shadow-[4px_4px_0px_rgba(15,23,42,0.22)] sm:px-4 sm:py-1.5 sm:text-xs"
+                  className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-slate-900 bg-linear-to-r from-[#C9F0FF] via-[#E4E8FF] to-[#FFE5F3] px-3 py-1 text-[0.7rem] font-bold uppercase tracking-[0.2em] text-slate-900 shadow-[4px_4px_0px_rgba(15,23,42,0.22)] sm:px-4 sm:py-1.5 sm:text-xs"
                 >
                   <MessagesSquare className="h-4 w-4 sm:h-4 sm:w-4" />
                   <span className="hidden sm:inline">Chat with Sarathi</span>
@@ -251,10 +343,10 @@ const JournalPage = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="relative flex flex-col gap-6 overflow-hidden rounded-[2.6rem] border-4 border-slate-900 bg-gradient-to-br from-white/95 via-[#F6F9FF]/92 to-white/95 p-6 shadow-[20px_20px_0px_rgba(15,23,42,0.22)] backdrop-blur-[18px] sm:p-8"
+            className="relative flex flex-col gap-6 overflow-hidden rounded-[2.6rem] border-4 border-slate-900 bg-linear-to-br from-white/95 via-[#F6F9FF]/92 to-white/95 p-6 shadow-[20px_20px_0px_rgba(15,23,42,0.22)] backdrop-blur-[18px] sm:p-8"
           >
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,229,165,0.32),_transparent_62%)]" />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,_rgba(161,210,255,0.28),_transparent_60%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,229,165,0.32),transparent_62%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(161,210,255,0.28),transparent_60%)]" />
             <div className="pointer-events-none absolute -right-24 top-1/2 h-48 w-48 -translate-y-1/2 rounded-full border border-white/40 bg-white/25 blur-[46px]" />
             <div className="relative z-10 flex flex-col gap-6">
               <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -365,9 +457,9 @@ const JournalPage = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
-            className="relative flex flex-col gap-6 overflow-hidden rounded-[2.6rem] border-4 border-slate-900 bg-gradient-to-br from-[#F8FBFF]/95 via-[#EEF6FF]/92 to-white/95 p-6 shadow-[20px_20px_0px_rgba(15,23,42,0.22)] backdrop-blur-[18px] sm:p-8"
+            className="relative flex flex-col gap-6 overflow-hidden rounded-[2.6rem] border-4 border-slate-900 bg-linear-to-br from-[#F8FBFF]/95 via-[#EEF6FF]/92 to-white/95 p-6 shadow-[20px_20px_0px_rgba(15,23,42,0.22)] backdrop-blur-[18px] sm:p-8"
           >
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(199,231,255,0.4),_transparent_58%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(199,231,255,0.4),transparent_58%)]" />
             <div className="pointer-events-none absolute inset-x-[15%] top-10 h-24 rounded-full bg-white/30 blur-2xl" />
             <div className="relative z-10 flex flex-col gap-6">
               <header className="flex flex-col gap-3">
@@ -408,9 +500,14 @@ const JournalPage = () => {
                     );
                   })}
                 </div>
-                <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-                  {activeTaskCount} active • {completedTaskCount} completed
-                </span>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                  <span>
+                    {activeTaskCount} active • {completedTaskCount} completed
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-[0.62rem] font-black tracking-[0.28em] text-slate-600">
+                    Karma {totalKarma}
+                  </span>
+                </div>
               </header>
 
               {filteredTasks.length > 0 ? (
@@ -422,7 +519,7 @@ const JournalPage = () => {
                       className="relative overflow-hidden rounded-2xl border-3 border-slate-900 px-4 py-3 shadow-[12px_12px_0px_rgba(15,23,42,0.18)] transition"
                     >
                       <span
-                        className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${
+                        className={`pointer-events-none absolute inset-0 bg-linear-to-br ${
                           task.done
                             ? "from-[#DDFCE0]/95 via-[#B8F5B7]/85 to-[#F0FFEA]/95"
                             : "from-white via-[#F5F8FF]/95 to-[#E5EEFF]/85"
@@ -435,22 +532,33 @@ const JournalPage = () => {
                           whileTap={{ scale: 0.9 }}
                           className={`grid h-9 w-9 place-items-center rounded-full border-3 border-slate-900 text-lg font-bold shadow-[0_4px_0_rgba(15,23,42,0.25)] transition ${
                             task.done
-                              ? "bg-gradient-to-br from-[#7DD86A] via-[#5AC65A] to-[#3FA94B] text-slate-900"
-                              : "bg-gradient-to-br from-white via-[#EFF4FF] to-[#DDE7FF] text-slate-700 hover:from-[#F5F8FF] hover:to-white"
+                              ? "bg-linear-to-br from-[#7DD86A] via-[#5AC65A] to-[#3FA94B] text-slate-900"
+                              : "bg-linear-to-br from-white via-[#EFF4FF] to-[#DDE7FF] text-slate-700 hover:from-[#F5F8FF] hover:to-white"
                           }`}
                           type="button"
                         >
                           {task.done ? "✔" : ""}
                         </motion.button>
-                        <span
-                          className={`text-sm font-semibold ${
-                            task.done
-                              ? "text-slate-500 line-through"
-                              : "text-slate-800"
-                          }`}
-                        >
-                          {task.text}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span
+                            className={`text-sm font-semibold ${
+                              task.done
+                                ? "text-slate-500 line-through"
+                                : "text-slate-800"
+                            }`}
+                          >
+                            {task.text}
+                          </span>
+                          <div className="flex flex-wrap items-center gap-2 text-[0.58rem] font-semibold uppercase tracking-[0.26em] text-slate-400">
+                            <span>Karma {task.karma ?? 5}</span>
+                            {task.category && <span>{task.category}</span>}
+                          </div>
+                          {task.note && (
+                            <p className="text-xs font-medium text-slate-500">
+                              {task.note}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </motion.li>
                   ))}
@@ -481,7 +589,7 @@ const JournalPage = () => {
                 : "Your archive is waiting for its first story."}
             </div>
           ) : (
-            <div className="relative ml-1 grid gap-6 before:absolute before:inset-y-3 before:left-2 before:w-[3px] before:bg-gradient-to-b before:from-[#A5B4FC] before:via-[#FFD07F] before:to-[#FBC2EB] sm:ml-4 sm:gap-8 sm:before:left-4">
+            <div className="relative ml-1 grid gap-6 before:absolute before:inset-y-3 before:left-2 before:w-[3px] before:bg-linear-to-b before:from-[#A5B4FC] before:via-[#FFD07F] before:to-[#FBC2EB] sm:ml-4 sm:gap-8 sm:before:left-4">
               {filteredEntries.map((entry, index) => {
                 const isExpanded = expandedEntryIds.includes(entry.id);
                 const bodyPreview = entry.body.trim();
@@ -492,9 +600,9 @@ const JournalPage = () => {
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true, amount: 0.2 }}
                     transition={{ duration: 0.4, delay: index * 0.05 }}
-                    className="relative ml-6 overflow-hidden rounded-[2.3rem] border-4 border-slate-900 bg-gradient-to-br from-white/95 via-[#F3F8FF]/93 to-[#FFF7EC]/95 px-5 py-5 shadow-[18px_18px_0px_rgba(15,23,42,0.2)] backdrop-blur-[14px] sm:ml-12 sm:px-8 sm:py-7"
+                    className="relative ml-6 overflow-hidden rounded-[2.3rem] border-4 border-slate-900 bg-linear-to-br from-white/95 via-[#F3F8FF]/93 to-[#FFF7EC]/95 px-5 py-5 shadow-[18px_18px_0px_rgba(15,23,42,0.2)] backdrop-blur-[14px] sm:ml-12 sm:px-8 sm:py-7"
                   >
-                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(252,216,164,0.32),_transparent_55%)]" />
+                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(252,216,164,0.32),transparent_55%)]" />
                     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(197,220,255,0.25),transparent_60%)]" />
                     <span className="absolute -left-7 top-6 grid h-10 w-10 place-items-center rounded-full border-4 border-slate-900 bg-[#FFE5A5] text-lg font-bold text-slate-900 shadow-[8px_8px_0px_rgba(15,23,42,0.22)] sm:-left-8">
                       {entry.mood === "Joyful"
