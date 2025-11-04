@@ -603,7 +603,7 @@ export default function ChatPage() {
             >
               <PlusCircle className="h-4 w-4" />
               <span className="hidden sm:inline">New Chat</span>
-              <span className="sm:hidden">New</span>
+          
             </motion.button>
           </div>
 
