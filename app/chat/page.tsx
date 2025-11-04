@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   Sparkles,
   ArrowUpRight,
+  PlusCircle,
 } from "lucide-react";
 
 type MessageAction = { label: string; href: string };
@@ -53,6 +54,12 @@ type ChatMessage = {
   actions?: MessageAction[];
   variant?: ChatMessageVariant;
   tasks?: TaskPayload[];
+};
+
+type ApiChatResponse = {
+  SarthiAi?: string;
+  tasks?: TaskPayload[];
+  error?: string;
 };
 
 type QuizQuestion = {
@@ -150,6 +157,7 @@ export default function ChatPage() {
     if (typeof window === "undefined") return;
 
     const storedProfile = window.localStorage.getItem(PROFILE_KEY);
+    const storedTone = window.localStorage.getItem("sarathi-active-tone");
     let nextProfile = createProfile();
     if (storedProfile) {
       try {
@@ -164,6 +172,11 @@ export default function ChatPage() {
       } catch {
         nextProfile = createProfile();
       }
+    } else if (storedTone) {
+      nextProfile = {
+        ...nextProfile,
+        tone: storedTone,
+      };
     }
 
     setProfile(nextProfile);
@@ -176,17 +189,11 @@ export default function ChatPage() {
       }
     }
 
-    const answered = nextProfile.quizAnswers.length;
-    if (!nextProfile.name) {
-      setStage("name");
-    } else if (answered < quizQuestions.length) {
-      setStage("quiz");
-      setQuizIndex(answered);
-    } else if (!nextProfile.problemSummary) {
-      setStage("problem");
-    } else {
-      setStage("chat");
+    const nextStage = resolveStageFromProfile(nextProfile);
+    if (nextStage === "quiz") {
+      setQuizIndex(countCompletedQuizAnswers(nextProfile.quizAnswers));
     }
+    setStage(nextStage);
 
     setProfileLoaded(true);
     setMessagesHydrated(true);
@@ -197,38 +204,10 @@ export default function ChatPage() {
 
     setMessages((prev) => {
       if (prev.length > 0) return prev;
-
-      const initial: ChatMessage[] = [];
-
-      if (stage === "name") {
-        initial.push({
-          role: "ai",
-          text: "Before we wander together, what should I lovingly call you?",
-        });
-      } else if (stage === "quiz") {
-        initial.push({
-          role: "ai",
-          text: "It's wonderful to see you again. Let's do a quick check-in so I can support you better.",
-        });
-      } else if (stage === "problem") {
-        initial.push({
-          role: "ai",
-          text: `I'm here with you${
-            profile?.name ? `, ${profile.name}` : ""
-          }. Share what's resting on your heart in your own words.`,
-        });
-      } else if (stage === "chat") {
-        initial.push({
-          role: "ai",
-          text: profile?.name
-            ? `Welcome back, ${profile.name}. Whenever you need me, I'm ready to listen.`
-            : "Whenever you're ready, share what's on your heart and we'll walk together.",
-        });
-      }
-
-      return initial;
+      const initialText = getInitialMessageForStage(stage, profile);
+      return initialText ? [{ role: "ai", text: initialText }] : [];
     });
-  }, [profile?.name, profileLoaded, stage]);
+  }, [profile, profileLoaded, stage]);
 
   useEffect(() => {
     if (!profileLoaded || stage !== "quiz") return;
@@ -244,9 +223,9 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!profileLoaded || stage !== "problem") return;
-    const prompt = `Thank you for checking in${
+    const prompt = `Thanks for pausing with me${
       profile?.name ? `, ${profile.name}` : ""
-    }. Tell me in your own words what you're moving through right now.`;
+    }. What's feeling heaviest for you right now?`;
     setMessages((prev) => {
       if (prev.some((msg) => msg.role === "ai" && msg.text === prompt))
         return prev;
@@ -332,7 +311,7 @@ export default function ChatPage() {
     if (stage === "name") {
       const cleanName = sanitizeName(text);
       if (!cleanName) {
-        setError("Please share a name so I can address you warmly.");
+        setError("Please share a name so I know what to call you.");
         return;
       }
 
@@ -341,7 +320,7 @@ export default function ChatPage() {
         { role: "user", text },
         {
           role: "ai",
-          text: `It's lovely to meet you, ${cleanName}. Let's do a gentle check-in together.`,
+          text: `Great to meet you, ${cleanName}. Let's do a quick check-in together.`,
         },
       ]);
 
@@ -430,6 +409,35 @@ export default function ChatPage() {
       setStage("chat");
     }
   };
+
+  const handleNewChat = useCallback(() => {
+    const baseProfile = profile ?? createProfile();
+    const nextStage = resolveStageFromProfile(baseProfile);
+
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(MESSAGES_KEY);
+    }
+
+    setIsTyping(false);
+    setError(null);
+    setShowScrollToBottom(false);
+
+    if (nextStage === "quiz") {
+      setQuizIndex(countCompletedQuizAnswers(baseProfile.quizAnswers));
+      setQuizSelection("");
+      setQuizFreeform("");
+      setQuizError(null);
+    }
+
+    setStage(nextStage);
+
+    const initialText = getInitialMessageForStage(nextStage, baseProfile);
+    setMessages(initialText ? [{ role: "ai", text: initialText }] : []);
+
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => scrollToBottom("auto"));
+    }
+  }, [profile, scrollToBottom]);
 
   const handleRequestTasks = async () => {
     if (isTyping || stage !== "chat") return;
@@ -544,10 +552,10 @@ export default function ChatPage() {
   const currentQuiz = stage === "quiz" ? quizQuestions[quizIndex] : null;
   const inputPlaceholder =
     stage === "name"
-      ? "Tell me your name so I can greet you."
+      ? "What name should I call you?"
       : stage === "problem"
-      ? "Describe what you're moving through."
-      : "Share your thought...";
+      ? "What feels most important to talk about today?"
+      : "Tell me what's on your mind...";
 
   useEffect(() => {
     if (!profileLoaded) return;
@@ -574,15 +582,30 @@ export default function ChatPage() {
 
       <header className="w-full border-b-4 border-black bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3 sm:py-4">
-          <motion.div whileHover={{ scale: 1.05 }} className="z-10">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-slate-900 bg-[#FFE5A5] px-2.5 py-1 text-[0.7rem] font-bold uppercase tracking-[0.15em] text-slate-900 shadow-[3px_3px_0px_rgba(15,23,42,0.25)] sm:px-4 sm:py-1.5 sm:text-xs"
+          <div className="flex items-center gap-2 sm:gap-3">
+            <motion.div whileHover={{ scale: 1.05 }} className="z-10">
+              <Link
+                href="/"
+                className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-slate-900 bg-[#FFE5A5] px-2.5 py-1 text-[0.7rem] font-bold uppercase tracking-[0.15em] text-slate-900 shadow-[3px_3px_0px_rgba(15,23,42,0.25)] sm:px-4 sm:py-1.5 sm:text-xs"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Back</span>
+              </Link>
+            </motion.div>
+
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.05, rotate: 0.6 }}
+              whileTap={{ scale: 0.94 }}
+              onClick={handleNewChat}
+              aria-label="Start a new chat"
+              className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-slate-900 bg-white px-2.5 py-1 text-[0.7rem] font-black uppercase tracking-[0.15em] text-slate-900 shadow-[3px_3px_0px_rgba(15,23,42,0.22)] transition hover:bg-[#F7F9FF] sm:px-4 sm:py-1.5 sm:text-xs"
             >
-              <ChevronLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Back</span>
-            </Link>
-          </motion.div>
+              <PlusCircle className="h-4 w-4" />
+              <span className="hidden sm:inline">New Chat</span>
+              <span className="sm:hidden">New</span>
+            </motion.button>
+          </div>
 
           <motion.div
             initial={{ opacity: 0, y: -6 }}
@@ -623,7 +646,7 @@ export default function ChatPage() {
         ref={chatContainerRef}
         className="chat-scrollbar z-10 flex-1 overflow-y-auto px-4 pb-24 pt-6 sm:px-10 sm:pb-28 sm:pt-10"
       >
-        <div className="mx-auto flex w-full max-w-3xl flex-col space-y-5 rounded-[2.4rem] border-[3px] border-slate-900/35 bg-white/85 px-5 py-6 shadow-[16px_16px_0_rgba(15,23,42,0.18)] backdrop-blur-md sm:space-y-6">
+        <div className="mx-auto flex w-full max-w-3xl flex-col space-y-5 rounded-[2.1rem] border border-slate-200 bg-white/80 px-4 py-5 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur-md sm:space-y-6 sm:px-6 sm:py-6">
           {messages.map((m, i) => {
             const isAI = m.role === "ai";
             const containsCode = /```/.test(m.text);
@@ -645,9 +668,9 @@ export default function ChatPage() {
               ? containsCode
                 ? "border-slate-900/80 bg-[#1F1D3A] font-mono whitespace-pre-wrap text-white shadow-none"
                 : variant === "tasks"
-                ? "border-[#4753A6]/40 bg-linear-to-br from-[#F5F8FF]/95 via-[#EEF3FF]/95 to-[#E4F4FF]/95 text-slate-800"
-                : "border-slate-900/40 bg-linear-to-br from-[#F7FAFF]/95 via-white/95 to-[#E9F1FF]/95 text-slate-800"
-              : "border-slate-900/55 bg-linear-to-br from-[#FFD07F] via-[#FFB4BC] to-[#FDE3FF] text-slate-900";
+                ? "border-slate-200 bg-white/95 text-slate-800"
+                : "border-slate-200 bg-white/90 text-slate-800"
+              : "border-[#FFC6D9]/60 bg-linear-to-br from-[#FFD9A8] via-[#FFBDD2] to-[#FDEBFF] text-slate-900";
             return (
               <motion.div
                 layout
@@ -658,52 +681,52 @@ export default function ChatPage() {
                 className={`flex ${isAI ? "justify-start" : "justify-end"}`}
               >
                 <div
-                  className={`max-w-[78%] rounded-[1.6rem] border-[3px] px-4 py-3 text-[0.9rem] font-medium leading-relaxed shadow-[8px_8px_0_rgba(15,23,42,0.1)] sm:max-w-[68%] sm:px-6 sm:py-4 sm:text-[0.95rem] ${bubbleClasses}`}
+                  className={`max-w-[92%] rounded-2xl border-2 px-4 py-3 text-[0.92rem] font-medium leading-relaxed shadow-[6px_6px_0_rgba(15,23,42,0.08)] sm:max-w-[70%] sm:px-6 sm:py-4 sm:text-[0.95rem] ${bubbleClasses}`}
                 >
                   {hasTasks ? (
-                    <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border-2 border-slate-900/15 bg-linear-to-r from-white/85 via-[#F3F5FF]/85 to-white/85 px-3 py-1.5 text-[0.62rem] font-bold uppercase tracking-[0.2em] text-slate-700 shadow-[3px_3px_0_rgba(15,23,42,0.08)]">
-                      <span className="inline-flex items-center gap-1.5 text-slate-800">
-                        <Sparkles className="h-3.5 w-3.5 text-[#6174D9]" />
-                        Fresh Tasks from Sarathi
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      <span className="inline-flex items-center gap-1.5 text-slate-700">
+                        <Sparkles className="h-3.5 w-3.5 text-[#4F59CE]" />
+                        Gentle tasks for today
                       </span>
-                      <span className="rounded-full border border-[#4050C7]/15 bg-[#E6ECFF]/80 px-2 py-0.5 text-[0.58rem] font-semibold text-[#3647B7]">
-                        In Journal
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50/80 px-2 py-0.5 text-[0.58rem] font-semibold text-slate-500">
+                        Saved to journal
                       </span>
                     </div>
                   ) : null}
-                  <div className="space-y-2">{content}</div>
+                  <div className="space-y-2 text-slate-700">{content}</div>
                   {hasTasks ? (
-                    <div className="mt-3 space-y-2">
+                    <div className="mt-3 space-y-2.5">
                       {m.tasks?.map((task, taskIndex) => (
                         <motion.div
                           key={`${m.role}-${i}-task-${taskIndex}`}
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{
-                            duration: 0.24,
+                            duration: 0.22,
                             delay: taskIndex * 0.05,
                           }}
-                          className="rounded-2xl border-2 border-[#4D5ADB]/25 bg-linear-to-br from-[#F7F8FF]/95 via-white/95 to-[#F9F5FF]/95 px-3.5 py-2.5 shadow-[4px_4px_0_rgba(15,23,42,0.1)]"
+                          className="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-3 shadow-[3px_3px_0_rgba(15,23,42,0.06)]"
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <span className="text-[0.9rem] font-semibold text-[#1B2659]">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <span className="text-[0.95rem] font-semibold text-slate-900">
                               {task.text}
                             </span>
                             {typeof task.karma === "number" ? (
-                              <span className="rounded-full border border-[#4D5ADB]/30 bg-[#E6E9FF]/80 px-2 py-0.5 text-[0.56rem] font-bold uppercase tracking-[0.16em] text-[#2F3A8C]">
+                              <span className="rounded-full bg-white/80 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.15em] text-[#4654C8]">
                                 +{task.karma} Karma
                               </span>
                             ) : null}
                           </div>
                           {task.note ? (
-                            <p className="mt-1.5 text-[0.78rem] font-medium leading-relaxed text-[#24326F]">
+                            <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
                               {task.note}
                             </p>
                           ) : null}
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[0.56rem] font-semibold uppercase tracking-[0.2em] text-[#5C6AE5]">
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-[#505CCC]">
                             {task.category ? (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-[#4D5ADB]/25 bg-[#E6EAFF]/85 px-2 py-0.5">
-                                <Sparkles className="h-3 w-3 text-[#5C6AE5]" />
+                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/90 px-2 py-0.5">
+                                <Sparkles className="h-3 w-3 text-[#4F59CE]" />
                                 {formatTaskCategory(task.category)}
                               </span>
                             ) : null}
@@ -718,7 +741,7 @@ export default function ChatPage() {
                         <Link
                           key={`${m.role}-${i}-action-${actionIndex}`}
                           href={action.href}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-900/15 bg-white/80 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-900/40 hover:shadow-[4px_4px_0_rgba(15,23,42,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/60 sm:text-[0.7rem]"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-slate-600 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_6px_16px_rgba(52,63,132,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9D6FF] sm:text-[0.7rem]"
                         >
                           <span>{action.label}</span>
                           <ArrowUpRight className="h-3.5 w-3.5" />
@@ -784,13 +807,13 @@ export default function ChatPage() {
           whileTap={{ scale: 0.93 }}
         >
           <ChevronDown className="h-4 w-4" />
-          <span className="hidden md:block">Go Back</span>
+          <span className="hidden md:block">Scroll Down</span>
         </motion.button>
       )}
 
       <footer className="sticky bottom-0 z-40 flex justify-center bg-[#E3EEFF]/90 px-3 pb-4 pt-3 backdrop-blur-md sm:px-8 sm:pb-5 sm:pt-4">
         <motion.div
-          className="w-full max-w-3xl rounded-3xl border-[3px] border-slate-900 bg-linear-to-r from-white/92 via-[#F6F9FF]/92 to-white/92 px-3 py-2.5 shadow-[14px_14px_0_rgba(15,23,42,0.2)] transition sm:px-4 sm:py-3"
+          className="w-full max-w-3xl rounded-3xl border-2 border-slate-200 bg-white/95 px-3 py-2.5 shadow-[0_12px_32px_rgba(15,23,42,0.12)] transition sm:px-4 sm:py-3"
           animate={{ scale: inputFocused ? 1.01 : 1 }}
           transition={{ type: "spring", stiffness: 260, damping: 26 }}
         >
@@ -981,6 +1004,10 @@ export default function ChatPage() {
       nextProfile = updater(base);
       if (typeof window !== "undefined") {
         window.localStorage.setItem(PROFILE_KEY, JSON.stringify(nextProfile));
+        window.localStorage.setItem(
+          "sarathi-active-tone",
+          nextProfile.tone ?? "warm"
+        );
       }
       return nextProfile;
     });
@@ -992,6 +1019,54 @@ type MessageSegment =
   | { type: "paragraph"; lines: string[] }
   | { type: "ordered-list"; lines: string[] }
   | { type: "unordered-list"; lines: string[] };
+
+function resolveStageFromProfile(profile: UserProfile | null): Stage {
+  if (!profile || !profile.name?.trim()) {
+    return "name";
+  }
+
+  const completedAnswers = countCompletedQuizAnswers(profile.quizAnswers);
+
+  if (completedAnswers < quizQuestions.length) {
+    return "quiz";
+  }
+
+  if (!profile.problemSummary?.trim()) {
+    return "problem";
+  }
+
+  return "chat";
+}
+
+function countCompletedQuizAnswers(answers?: QuizAnswer[]): number {
+  if (!Array.isArray(answers)) return 0;
+  return answers.filter((entry) => entry && entry.answer?.trim()).length;
+}
+
+function getInitialMessageForStage(
+  stage: Stage,
+  profile: UserProfile | null
+): string | null {
+  const name = profile?.name?.trim();
+  switch (stage) {
+    case "name":
+      return "Hi friend, what name would you like me to use for you?";
+    case "quiz":
+      return name
+        ? `Welcome back, ${name}. Let's do a quick check-in so I can understand how you're feeling today.`
+        : "Welcome back. Let's do a quick check-in so I can understand how you're feeling today.";
+    case "problem":
+      return name
+        ? `Thanks for trusting me, ${name}. What's the one thing weighing on you that we should talk about first?`
+        : "Thanks for trusting me. What's the one thing weighing on you that we should talk about first?";
+    case "chat":
+      return name
+        ? `I'm here, ${name}. What would you like to explore together right now?`
+        : "I'm here. What would you like to explore together right now?";
+    default:
+      return null;
+  }
+}
 
 function sanitizeStoredMessages(raw: string): ChatMessage[] {
   try {
@@ -1388,7 +1463,7 @@ function QuizCard({
   onSubmit,
 }: QuizCardProps) {
   return (
-    <div className="self-start max-w-[78%] rounded-[1.8rem] border-[3px] border-slate-900/45 bg-linear-to-br from-[#F6F9FF]/95 via-white/95 to-[#E8F1FF]/95 px-6 py-5 text-sm font-medium leading-relaxed text-slate-800 shadow-[10px_10px_0_rgba(15,23,42,0.12)] sm:max-w-[70%] sm:px-7 sm:py-6 sm:text-base">
+    <div className="self-start w-full max-w-full rounded-[1.6rem] border-2 border-slate-200 bg-white/95 px-5 py-5 text-sm font-medium leading-relaxed text-slate-800 shadow-[0_10px_30px_rgba(15,23,42,0.08)] sm:max-w-[70%] sm:px-7 sm:py-6 sm:text-base">
       <div className="flex flex-col gap-3">
         <div>
           <p className="font-semibold text-slate-900">{question.prompt}</p>
