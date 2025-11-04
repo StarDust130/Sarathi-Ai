@@ -371,6 +371,9 @@ export default function Home() {
             (You have the right to perform your duties, but not to the fruits
             thereof.)
           </p>
+          <p className="mt-3 text-xs text-[#8b6b2c] font-medium">
+            — Bhagavad Gita 2.47
+          </p>
         </motion.blockquote>
       </div>
 
