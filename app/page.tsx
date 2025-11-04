@@ -269,12 +269,21 @@ export default function Home() {
 
       <div className="relative z-20 mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center gap-16 px-4 pb-24 pt-16 sm:px-8">
         <header className="flex w-full flex-col items-center gap-8 text-center">
-          <span className="inline-flex items-center gap-3 rounded-full border-4 border-slate-900 bg-[#FFF5B8] px-5 py-2 text-xs font-black uppercase tracking-[0.28em] text-slate-900 shadow-[12px_12px_0px_rgba(15,23,42,0.32)] sm:text-sm">
+            <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+            className="inline-flex items-center gap-3 rounded-full border-4 border-slate-900 bg-gradient-to-r from-[#FFF5B8] to-[#FFD07F] px-5 py-2 text-xs font-black uppercase tracking-[0.28em] text-slate-900 shadow-[12px_12px_0px_rgba(15,23,42,0.32)] sm:text-sm"
+            >
             Sarathi AI
-            <span className="rounded-full bg-slate-900 px-2 py-[2px] text-[0.6rem] text-white">
+            <span className="inline-flex items-center gap-2 rounded-full bg-slate-900/90 px-3 py-1 text-[0.7rem] text-white/90 backdrop-blur-sm">
+                <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-400"></span>
+              </span>
               Live
             </span>
-          </span>
+            </motion.div>
 
           <motion.h1
             initial={{ opacity: 0, y: -20 }}
