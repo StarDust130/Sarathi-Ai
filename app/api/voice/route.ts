@@ -23,6 +23,18 @@ const VOICE_MAP: Record<ToneValue, string> = {
   coach: process.env.ELEVENLABS_COACH_VOICE_ID || "ADwIQE9uvyqQvKfuWFE8",
 };
 
+const HINDI_VOICE_MAP: Record<ToneValue, string | undefined> = {
+  warm:
+    process.env.ELEVENLABS_HINDI_WARM_VOICE_ID ||
+    process.env.ELEVENLABS_HINDI_VOICE_ID,
+  spiritual:
+    process.env.ELEVENLABS_HINDI_SPIRITUAL_VOICE_ID ||
+    process.env.ELEVENLABS_HINDI_VOICE_ID,
+  coach:
+    process.env.ELEVENLABS_HINDI_COACH_VOICE_ID ||
+    process.env.ELEVENLABS_HINDI_VOICE_ID,
+};
+
 const toneDirections: Record<ToneValue, string> = {
   warm: "- Sound like a caring, grounded best friend offering solace and validation.\n- Blend practical suggestions with gentle reassurance.",
   spiritual:
@@ -393,10 +405,27 @@ export async function POST(request: Request) {
       ? clamp(rawReply, isLong ? 420 : 160)
       : replyFallback;
 
-    const voiceId = VOICE_MAP[tone];
+    const preferHindiVoice = language === "hindi";
+    const voiceId = preferHindiVoice
+      ? HINDI_VOICE_MAP[tone] || VOICE_MAP[tone]
+      : VOICE_MAP[tone];
     const outputFormat =
       process.env.ELEVENLABS_OUTPUT_FORMAT?.trim() || "mp3_44100_128";
     const mimeType = outputFormat.includes("mp3") ? "audio/mpeg" : "audio/wav";
+
+    const voiceSettings = preferHindiVoice
+      ? {
+          stability: 0.52,
+          similarity_boost: 0.62,
+          style: 0.45,
+          use_speaker_boost: false,
+        }
+      : {
+          stability: 0.46,
+          similarity_boost: 0.72,
+          style: 0.2,
+          use_speaker_boost: true,
+        };
 
     const ttsRes = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -411,12 +440,7 @@ export async function POST(request: Request) {
           text: reply,
           model_id: "eleven_multilingual_v2",
           output_format: outputFormat,
-          voice_settings: {
-            stability: 0.46,
-            similarity_boost: 0.72,
-            style: 0.2,
-            use_speaker_boost: true,
-          },
+          voice_settings: voiceSettings,
         }),
       }
     );
