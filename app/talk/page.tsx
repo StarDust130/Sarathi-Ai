@@ -9,6 +9,8 @@ type Status = "idle" | "recording" | "processing" | "speaking" | "error";
 
 type ToneValue = "warm" | "spiritual" | "coach";
 
+type TranscriptLanguage = "english" | "hinglish" | "hindi" | "unknown";
+
 type ToneOption = {
   value: ToneValue;
   label: string;
@@ -49,6 +51,18 @@ const personaLabels: Record<ToneValue, string> = {
   spiritual: "soulful guide",
   coach: "gentle coach",
 };
+
+type ConversationTurn = {
+  id: string;
+  user: string;
+  assistant: string;
+  timestamp: number;
+  tone: ToneValue;
+  language: TranscriptLanguage;
+};
+
+const HISTORY_KEY = "sarathi-talk-history";
+const MAX_HISTORY_TURNS = 4;
 
 function getToneGlow(tone: ToneValue) {
   switch (tone) {
@@ -108,6 +122,53 @@ export default function VoicePage() {
   const [tone, setTone] = useState<ToneValue>("warm");
   const [profileName, setProfileName] = useState("");
   const [toneMenuOpen, setToneMenuOpen] = useState(false);
+  const [history, setHistory] = useState<ConversationTurn[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = window.localStorage.getItem(HISTORY_KEY);
+      if (!stored) return [];
+      const parsed = JSON.parse(stored) as Array<Partial<ConversationTurn>>;
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((turn) => {
+          if (!turn) return null;
+          const user = typeof turn.user === "string" ? turn.user.trim() : "";
+          const assistant =
+            typeof turn.assistant === "string" ? turn.assistant.trim() : "";
+          if (!user || !assistant) return null;
+          const id =
+            typeof turn.id === "string"
+              ? turn.id
+              : `rehydrate-${Math.random().toString(16).slice(2)}`;
+          const timestamp =
+            typeof turn.timestamp === "number" ? turn.timestamp : Date.now();
+          const storedTone =
+            turn.tone === "warm" ||
+            turn.tone === "spiritual" ||
+            turn.tone === "coach"
+              ? turn.tone
+              : "warm";
+          const lang: TranscriptLanguage =
+            turn.language === "hindi" ||
+            turn.language === "hinglish" ||
+            turn.language === "english"
+              ? turn.language
+              : "unknown";
+          return {
+            id,
+            user,
+            assistant,
+            timestamp,
+            tone: storedTone,
+            language: lang,
+          } satisfies ConversationTurn;
+        })
+        .filter(Boolean)
+        .slice(-MAX_HISTORY_TURNS) as ConversationTurn[];
+    } catch {
+      return [];
+    }
+  });
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -189,6 +250,20 @@ export default function VoicePage() {
       window.removeEventListener("keydown", handleEscape);
     };
   }, [toneMenuOpen]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (!history.length) {
+        window.localStorage.removeItem(HISTORY_KEY);
+      } else {
+        const persistable = history.slice(-MAX_HISTORY_TURNS);
+        window.localStorage.setItem(HISTORY_KEY, JSON.stringify(persistable));
+      }
+    } catch {
+      /* ignore storage issues */
+    }
+  }, [history]);
 
   const persistTone = (value: ToneValue) => {
     setTone(value);
@@ -296,6 +371,23 @@ export default function VoicePage() {
     if (profileName) {
       formData.append("name", profileName);
     }
+    if (history.length) {
+      const recentTurns = history
+        .slice(-MAX_HISTORY_TURNS)
+        .map(
+          ({ user, assistant, tone: priorTone, language: priorLanguage }) => ({
+            user,
+            assistant,
+            tone: priorTone,
+            language: priorLanguage,
+          })
+        );
+      try {
+        formData.append("history", JSON.stringify(recentTurns));
+      } catch {
+        /* ignore serialization failure */
+      }
+    }
 
     try {
       const res = await fetch("/api/voice", { method: "POST", body: formData });
@@ -316,6 +408,36 @@ export default function VoicePage() {
         setErrorMessage("Playback was blocked. Tap again to listen.");
         setStatus("error");
       });
+
+      const resolvedTranscript =
+        typeof result?.transcript === "string" && result.transcript.trim()
+          ? result.transcript.trim()
+          : transcriptText;
+      const resolvedReply =
+        typeof result?.reply === "string" && result.reply.trim()
+          ? result.reply.trim()
+          : "";
+      if (resolvedTranscript && resolvedReply) {
+        const turn: ConversationTurn = {
+          id: `turn-${Date.now().toString(36)}-${Math.random()
+            .toString(16)
+            .slice(2, 6)}`,
+          user: resolvedTranscript,
+          assistant: resolvedReply,
+          timestamp: Date.now(),
+          tone: activeTone.value,
+          language:
+            result?.language === "hindi" ||
+            result?.language === "hinglish" ||
+            result?.language === "english"
+              ? result.language
+              : "unknown",
+        };
+        setHistory((prev) => {
+          const next = [...prev, turn];
+          return next.slice(-MAX_HISTORY_TURNS);
+        });
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Something went wrong. Try again.";

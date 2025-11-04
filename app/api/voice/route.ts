@@ -12,6 +12,8 @@ const DEFAULT_CHAT_MODEL = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
 const GROQ_API_BASE =
   process.env.GROQ_API_BASE?.trim() || "https://api.groq.com/openai/v1";
 
+const MAX_HISTORY_TURNS = 4;
+
 const VOICE_MAP: Record<ToneValue, string> = {
   warm: process.env.ELEVENLABS_WARM_VOICE_ID || "CX1mcqJxcZzy2AsgaBjn",
   spiritual:
@@ -35,12 +37,60 @@ const personaLabels: Record<ToneValue, string> = {
   coach: "gentle coach",
 };
 
+type HistoryTurn = {
+  user: string;
+  assistant: string;
+  tone: ToneValue;
+  language: TranscriptLanguage;
+};
+
 const tidy = (value: string) => value.replace(/\s+/g, " ").trim();
 
 const clamp = (value: string, max?: number) => {
   const next = tidy(value);
   if (!max || next.length <= max) return next;
   return next.slice(0, max).trim();
+};
+
+const parseHistoryTurns = (raw: FormDataEntryValue | null): HistoryTurn[] => {
+  if (typeof raw !== "string") return [];
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!Array.isArray(parsed)) return [];
+    const turns = parsed
+      .map((turn): HistoryTurn | null => {
+        if (!turn || typeof turn !== "object") return null;
+        const user = clamp(
+          String((turn as Record<string, unknown>).user ?? ""),
+          480
+        );
+        const assistant = clamp(
+          String((turn as Record<string, unknown>).assistant ?? ""),
+          480
+        );
+        if (!user || !assistant) return null;
+        const tone = resolveTone(
+          (turn as Record<string, unknown>).tone as FormDataEntryValue
+        );
+        const languageRaw = String(
+          (turn as Record<string, unknown>).language ?? ""
+        ).toLowerCase();
+        const language: TranscriptLanguage =
+          languageRaw === "hindi" || languageRaw === "hinglish"
+            ? languageRaw
+            : languageRaw === "english"
+            ? "english"
+            : "english";
+        return { user, assistant, tone, language };
+      })
+      .filter(Boolean) as HistoryTurn[];
+    if (!turns.length) return [];
+    return turns.slice(-MAX_HISTORY_TURNS);
+  } catch {
+    return [];
+  }
 };
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
@@ -82,6 +132,22 @@ const detectTranscriptLanguage = (text: string): TranscriptLanguage => {
     "ghar",
     "man",
     "dil",
+    "mera",
+    "meri",
+    "mere",
+    "kyun",
+    "kyon",
+    "kabhi",
+    "batao",
+    "sun",
+    "bhagwan",
+    "kripa",
+    "sach",
+    "chahiye",
+    "karu",
+    "karo",
+    "hona",
+    "zindagi",
   ];
   const englishSignals = ["the", "and", "but", "is", "are", "feel", "help"];
 
@@ -130,7 +196,7 @@ function buildSystemPrompt({
     hinglish:
       "Reply in warm Hinglish using the Latin script, blending Hindi and English words naturally.",
     hindi:
-      "Respond in natural Hindi using the Devanagari script so it reads like thoughtful conversation.",
+      "Respond fully in natural, flowing Hindi using the Devanagari script. Choose vocabulary that sounds conversational and avoid awkward literal translations.",
   };
 
   return `
@@ -157,6 +223,9 @@ ${toneGuide}
   } that is easy to listen to.
 - Keep each sentence under ~18 words so the voice output feels crisp.
 - Invite them to share more when it feels natural.
+
+**Continuity:**
+- Previous voice notes may appear before the newest message. Carry through the thread of emotion and practical guidance without repeating the same sentences.
 
 **Off-Topic Filter:**
 - If they ask for random fun or stray off support topics, gently redirect.
@@ -188,6 +257,7 @@ export async function POST(request: Request) {
 
     const tone = resolveTone(formData.get("tone"));
     const seekerName = tidy(String(formData.get("name") || "")).slice(0, 48);
+    const historyTurns = parseHistoryTurns(formData.get("history"));
 
     const audioForm = new FormData();
     audioForm.append("file", file, file.name || "audio.webm");
@@ -240,13 +310,40 @@ export async function POST(request: Request) {
 
     const talkMode = getTalkMode();
     const isLong = talkMode !== "short";
-    const language = detectTranscriptLanguage(transcriptText);
+    const initialLanguage = detectTranscriptLanguage(transcriptText);
+    const historyLanguageTally = historyTurns.reduce((acc, turn) => {
+      acc[turn.language] = (acc[turn.language] || 0) + 1;
+      return acc;
+    }, {} as Record<TranscriptLanguage, number>);
+    let language = initialLanguage;
+    const hindiWeight = historyLanguageTally.hindi ?? 0;
+    const hinglishWeight = historyLanguageTally.hinglish ?? 0;
+    if (language !== "hindi" && hindiWeight >= 2) {
+      language = "hindi";
+    } else if (language === "english" && hinglishWeight >= 2) {
+      language = "hinglish";
+    }
 
     const systemPrompt = buildSystemPrompt({
       tone,
       name: seekerName,
       talkMode,
       language,
+    });
+
+    const historyMessages = historyTurns.flatMap((turn) => {
+      const sequence: Array<{ role: "user" | "assistant"; content: string }> =
+        [];
+      if (turn.user) {
+        sequence.push({ role: "user", content: clamp(turn.user, 520) });
+      }
+      if (turn.assistant) {
+        sequence.push({
+          role: "assistant",
+          content: clamp(turn.assistant, 520),
+        });
+      }
+      return sequence;
     });
 
     const completionRes = await fetch(`${GROQ_API_BASE}/chat/completions`, {
@@ -262,6 +359,7 @@ export async function POST(request: Request) {
         max_tokens: isLong ? 260 : 120,
         messages: [
           { role: "system", content: systemPrompt },
+          ...historyMessages,
           { role: "user", content: transcriptText },
         ],
       }),
