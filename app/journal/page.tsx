@@ -33,9 +33,7 @@ const moodOptions = [
   { label: "Resolute", emoji: "⚡" },
 ];
 
-const defaultTasks: Task[] = [
-
-];
+const defaultTasks: Task[] = [];
 
 const getDefaultTasks = (): Task[] =>
   defaultTasks.map((task, index) => ({
@@ -287,8 +285,7 @@ const JournalPage = () => {
               className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-160 -translate-x-1/2 rounded-full bg-linear-to-r from-[#FFE5A5]/45 via-transparent to-[#AFDCFF]/45 blur-3xl md:block"
             />
             <span className="pointer-events-none absolute inset-x-6 bottom-0 h-[3px] rounded-full bg-linear-to-r from-transparent via-[#FFCD7C] to-transparent sm:inset-x-10" />
-            <div className="relative mx-auto flex w-full max-w-6xl items-center justify-between">
-              {/* Left - Back Button */}
+            <div className="relative mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 sm:flex-nowrap">
               <motion.div whileHover={{ scale: 1.05 }} className="z-10">
                 <Link
                   href="/"
@@ -299,12 +296,10 @@ const JournalPage = () => {
                 </Link>
               </motion.div>
 
-              {/* Center Title */}
-              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-slate-900 bg-white/85 px-5 py-1.5 text-[0.85rem] font-extrabold uppercase tracking-[0.18em] text-slate-900 shadow-[6px_6px_0px_rgba(15,23,42,0.28)] sm:text-[0.9rem]">
+              <span className="relative flex-1 rounded-full border-[3px] border-slate-900 bg-white/85 px-3 py-1 text-center text-[0.72rem] font-extrabold uppercase tracking-[0.12em] text-slate-900 shadow-[6px_6px_0px_rgba(15,23,42,0.28)] sm:absolute sm:left-1/2 sm:top-1/2 sm:w-auto sm:-translate-x-1/2 sm:-translate-y-1/2 sm:flex-none sm:px-5 sm:py-1.5 sm:text-[0.85rem] sm:tracking-[0.18em] md:text-[0.9rem]">
                 Sarathi Journal
               </span>
 
-              {/* Right - Journal Button */}
               <motion.div whileHover={{ scale: 1.05 }} className="z-10">
                 <Link
                   href="/chat"
