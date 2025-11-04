@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
   Mic,
@@ -9,9 +9,17 @@ import {
   ChevronDown,
   ChevronLeft,
   Sparkles,
+  ArrowUpRight,
 } from "lucide-react";
 
-type ChatMessage = { role: "ai" | "user"; text: string };
+type MessageAction = { label: string; href: string };
+
+type ChatMessage = {
+  role: "ai" | "user";
+  text: string;
+  variant?: "default" | "tasks";
+  actions?: MessageAction[];
+};
 type ApiChatResponse = {
   SarthiAi?: unknown;
   error?: string;
@@ -28,7 +36,13 @@ type QuizQuestion = {
 
 type QuizAnswer = { id: string; question: string; answer: string };
 
-type ToneOption = { value: string; label: string; helper: string };
+type ToneOption = {
+  value: string;
+  label: string;
+  helper: string;
+  icon: string;
+  gradient: string;
+};
 
 type TaskPayload = {
   text: string;
@@ -57,22 +71,29 @@ type Stage = "loading" | "name" | "quiz" | "problem" | "chat";
 
 const PROFILE_KEY = "sarathi-profile";
 const TASKS_KEY = "sarathi-journal-tasks";
+const MESSAGES_KEY = "sarathi-chat-messages";
 
 const toneOptions: ToneOption[] = [
   {
     value: "warm",
     label: "Warm Friend",
     helper: "Soft encouragement with gentle reassurance.",
+    icon: "🌤️",
+    gradient: "from-[#FFE0B5] via-[#FFD3C8] to-[#FFC9F1]",
   },
   {
     value: "spiritual",
     label: "Spiritual Guide",
     helper: "Meditative reflections inspired by timeless wisdom.",
+    icon: "🕯️",
+    gradient: "from-[#D1E7FF] via-[#E8E9FF] to-[#D7FFF0]",
   },
   {
     value: "coach",
     label: "Gentle Coach",
     helper: "Clear next steps with grounded motivation.",
+    icon: "🌱",
+    gradient: "from-[#C9F0FF] via-[#FFE1C4] to-[#FFEAD7]",
   },
 ];
 
@@ -117,6 +138,9 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
+  const [toneMenuOpen, setToneMenuOpen] = useState(false);
+  const [tonePulse, setTonePulse] = useState(false);
+  const [messagesHydrated, setMessagesHydrated] = useState(false);
 
   const [stage, setStage] = useState<Stage>("loading");
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -128,6 +152,9 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  const toneMenuRef = useRef<HTMLDivElement | null>(null);
+  const toneButtonRef = useRef<HTMLButtonElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     messagesEndRef.current?.scrollIntoView({ behavior });
@@ -154,6 +181,13 @@ export default function ChatPage() {
     }
 
     setProfile(nextProfile);
+    const storedMessages = window.sessionStorage.getItem(MESSAGES_KEY);
+    if (storedMessages) {
+      const hydrated = sanitizeStoredMessages(storedMessages);
+      if (hydrated.length > 0) {
+        setMessages(hydrated);
+      }
+    }
     const answered = nextProfile.quizAnswers.length;
     if (!nextProfile.name) {
       setStage("name");
@@ -166,6 +200,7 @@ export default function ChatPage() {
       setStage("chat");
     }
     setProfileLoaded(true);
+    setMessagesHydrated(true);
   }, []);
 
   useEffect(() => {
@@ -258,6 +293,45 @@ export default function ChatPage() {
     setQuizFreeform("");
     setQuizError(null);
   }, [quizIndex, stage]);
+
+  useEffect(() => {
+    if (!messagesHydrated) return;
+    if (typeof window === "undefined") return;
+    try {
+      window.sessionStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
+    } catch (error) {
+      console.warn("Failed to persist chat history", error);
+    }
+  }, [messages, messagesHydrated]);
+
+  useEffect(() => {
+    if (!toneMenuOpen) return;
+
+    const handleOutsideClick = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (
+        toneMenuRef.current?.contains(target) ||
+        toneButtonRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setToneMenuOpen(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setToneMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("pointerdown", handleOutsideClick);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("pointerdown", handleOutsideClick);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [toneMenuOpen]);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -380,6 +454,17 @@ export default function ChatPage() {
     await processMessage(requestText, { requestTasks: true });
   };
 
+  const syncInputHeight = useCallback(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    const maxHeight = 144;
+    textarea.style.height = "auto";
+    const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY =
+      textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, []);
+
   const processMessage = useCallback(
     async (text: string, overrides?: Partial<ApiChatRequest>) => {
       setIsTyping(true);
@@ -414,16 +499,34 @@ export default function ChatPage() {
           throw new Error(data.error);
         }
 
+        let actions: MessageAction[] | undefined;
         if (Array.isArray(data?.tasks) && data.tasks.length > 0) {
           saveTasksToJournal(data.tasks);
+          actions = [
+            {
+              label: "View Journal",
+              href: "/journal",
+            },
+          ];
         }
 
-        const reply =
+        const rawReply =
           typeof data?.SarthiAi === "string"
             ? data.SarthiAi
             : String(data?.SarthiAi || "No reply from AI.");
 
-        setMessages((prev) => [...prev, { role: "ai", text: reply }]);
+        const reply = actions
+          ? `${rawReply}\n\nI've saved these gentle tasks in your journal. Tap "View Journal" whenever you're ready.`
+          : rawReply;
+
+        const nextMessage: ChatMessage = {
+          role: "ai",
+          text: reply,
+          actions,
+          variant: actions ? "tasks" : "default",
+        };
+
+        setMessages((prev) => [...prev, nextMessage]);
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Unexpected error occurred.";
@@ -443,6 +546,10 @@ export default function ChatPage() {
   );
 
   const toneValue = profile?.tone ?? "warm";
+  const activeTone =
+    toneOptions.find((option) => option.value === toneValue) ?? toneOptions[0];
+  const displayName = profile?.name?.trim() ? profile.name : "Dear Friend";
+  const toneGlow = getToneGlow(toneValue);
   const currentQuiz = stage === "quiz" ? quizQuestions[quizIndex] : null;
   const inputPlaceholder =
     stage === "name"
@@ -450,6 +557,17 @@ export default function ChatPage() {
       : stage === "problem"
       ? "Describe what you're moving through."
       : "Share your thought...";
+
+  useEffect(() => {
+    if (!profileLoaded) return;
+    setTonePulse(true);
+    const timeout = window.setTimeout(() => setTonePulse(false), 480);
+    return () => window.clearTimeout(timeout);
+  }, [toneValue, profileLoaded]);
+
+  useEffect(() => {
+    syncInputHeight();
+  }, [input, stage, syncInputHeight]);
 
   return (
     <main className="relative flex flex-col h-dvh bg-[#E3EEFF] text-slate-900 selection:bg-[#FFE5A5]/70 selection:text-slate-900">
@@ -476,15 +594,23 @@ export default function ChatPage() {
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: -8 }}
+            initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            className="flex flex-col items-center text-center"
           >
-            <Link
-              href="/talk"
-              className="flex items-center justify-center rounded-full border-2 border-black bg-linear-to-r from-[#F4E8FF] via-[#E4F4FF] to-[#FFEED8] px-4 py-1 text-xs font-black uppercase tracking-[0.22em] text-slate-900 shadow-[4px_4px_0_#00000022] sm:px-6 sm:py-2 sm:text-sm"
+            <span className="text-[0.6rem] font-semibold uppercase tracking-[0.24em] text-slate-500 sm:text-[0.7rem]">
+              Sarathi walks with
+            </span>
+            <motion.span
+              key={displayName}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, ease: "easeOut" }}
+              className="mt-1 inline-flex items-center justify-center rounded-full border-[3px] border-slate-900 bg-linear-to-r from-[#FFF0C8] via-[#F6E9FF] to-[#FFE1EC] px-4 py-1 text-xs font-black uppercase tracking-[0.3em] text-slate-900 shadow-[6px_6px_0_rgba(15,23,42,0.18)] sm:px-7 sm:py-2 sm:text-base sm:tracking-[0.42em]"
             >
-              Chat with Sarathi
-            </Link>
+              {displayName}
+            </motion.span>
           </motion.div>
 
           <motion.div
@@ -510,24 +636,45 @@ export default function ChatPage() {
           {messages.map((m, i) => {
             const isAI = m.role === "ai";
             const containsCode = /```/.test(m.text);
+            const content = containsCode
+              ? renderCodeBlock(m.text)
+              : renderMessageSegments(m.text, isAI);
+            const variant =
+              m.variant ?? (m.actions?.length ? "tasks" : "default");
+            const bubbleClasses = isAI
+              ? containsCode
+                ? "border-slate-900/80 bg-[#1F1D3A] font-mono whitespace-pre-wrap text-white shadow-none"
+                : variant === "tasks"
+                ? "border-[#4753A6]/40 bg-linear-to-br from-[#F5F8FF]/95 via-[#EEF3FF]/95 to-[#E4F4FF]/95 text-slate-800"
+                : "border-slate-900/40 bg-linear-to-br from-[#F7FAFF]/95 via-white/95 to-[#E9F1FF]/95 text-slate-800"
+              : "border-slate-900/55 bg-linear-to-br from-[#FFD07F] via-[#FFB4BC] to-[#FDE3FF] text-slate-900";
             return (
               <motion.div
+                layout
                 key={`${m.role}-${i}`}
                 initial={isAI ? { opacity: 0, x: -20 } : { opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                transition={{ type: "spring", stiffness: 280, damping: 26 }}
                 className={`flex ${isAI ? "justify-start" : "justify-end"}`}
               >
                 <div
-                  className={`max-w-[74%] rounded-[1.8rem] border-[3px] px-5 py-3 text-sm font-medium leading-relaxed shadow-[10px_10px_0_rgba(15,23,42,0.12)] sm:px-7 sm:py-4 sm:text-base ${
-                    isAI
-                      ? containsCode
-                        ? "border-slate-900/80 bg-[#1F1D3A] font-mono whitespace-pre-wrap text-white shadow-none"
-                        : "border-slate-900/45 bg-linear-to-br from-[#F6F9FF]/95 via-white/95 to-[#E8F1FF]/95 text-slate-800"
-                      : "border-slate-900/60 bg-linear-to-br from-[#FFD07F] via-[#FFB4BC] to-[#FDE3FF] text-slate-900"
-                  }`}
+                  className={`max-w-[78%] rounded-[1.6rem] border-[3px] px-4 py-3 text-[0.9rem] font-medium leading-relaxed shadow-[8px_8px_0_rgba(15,23,42,0.1)] sm:max-w-[68%] sm:px-6 sm:py-4 sm:text-[0.95rem] ${bubbleClasses}`}
                 >
-                  {m.text}
+                  <div className="space-y-2">{content}</div>
+                  {Array.isArray(m.actions) && m.actions.length > 0 ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {m.actions.map((action, actionIndex) => (
+                        <Link
+                          key={`${m.role}-${i}-action-${actionIndex}`}
+                          href={action.href}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-900/15 bg-white/80 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-900/40 hover:shadow-[4px_4px_0_rgba(15,23,42,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/60 sm:text-[0.7rem]"
+                        >
+                          <span>{action.label}</span>
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </motion.div>
             );
@@ -590,54 +737,124 @@ export default function ChatPage() {
         </motion.button>
       )}
 
-      <footer className="sticky bottom-0 z-40 flex justify-center bg-[#E3EEFF]/90 px-4 pb-5 pt-4 backdrop-blur-md sm:px-8">
-        <motion.div className="w-full max-w-3xl rounded-3xl border-[3px] border-slate-900 bg-linear-to-r from-white/92 via-[#F6F9FF]/92 to-white/92 px-4 py-3 shadow-[14px_14px_0_rgba(15,23,42,0.2)] transition">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-            <label className="flex items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-slate-600 sm:text-xs">
-              Tone
-              <div className="relative">
-                <select
-                  value={toneValue}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    commitProfile((prev) => ({
-                      ...prev,
-                      tone: value,
-                      lastUpdated: new Date().toISOString(),
-                    }));
+      <footer className="sticky bottom-0 z-40 flex justify-center bg-[#E3EEFF]/90 px-3 pb-4 pt-3 backdrop-blur-md sm:px-8 sm:pb-5 sm:pt-4">
+        <motion.div
+          className="w-full max-w-3xl rounded-3xl border-[3px] border-slate-900 bg-linear-to-r from-white/92 via-[#F6F9FF]/92 to-white/92 px-3 py-2.5 shadow-[14px_14px_0_rgba(15,23,42,0.2)] transition sm:px-4 sm:py-3"
+          animate={{ scale: inputFocused ? 1.01 : 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 26 }}
+        >
+          <div
+            className={`mb-2 flex w-full items-center gap-2 sm:gap-3 ${
+              stage === "chat" ? "justify-between" : "justify-start"
+            }`}
+          >
+            <div className="relative flex min-w-0 items-center">
+              <motion.button
+                ref={toneButtonRef}
+                type="button"
+                whileHover={{ scale: 1.03, rotate: 0.4 }}
+                whileTap={{ scale: 0.95 }}
+                animate={tonePulse ? { scale: [1, 1.07, 1] } : { scale: 1 }}
+                transition={{
+                  duration: tonePulse ? 0.45 : 0.2,
+                  ease: "easeOut",
+                }}
+                onClick={() => setToneMenuOpen((prev) => !prev)}
+                aria-haspopup="listbox"
+                aria-expanded={toneMenuOpen}
+                className={`group relative inline-flex items-center gap-2 rounded-full border-[3px] border-slate-900 bg-linear-to-r ${activeTone.gradient} px-3 py-1 text-left text-[0.6rem] font-black uppercase tracking-[0.18em] text-slate-900 shadow-[6px_6px_0_rgba(15,23,42,0.14)] focus:outline-none sm:px-3.5 sm:py-1.5 sm:text-[0.68rem]`}
+              >
+                <motion.span
+                  key={`tone-glow-${toneValue}`}
+                  className="pointer-events-none absolute inset-0 -z-10"
+                  initial={{ opacity: 0.3, scale: 0.9 }}
+                  animate={{ opacity: tonePulse ? 0.7 : 0.45, scale: 1 }}
+                  transition={{
+                    duration: tonePulse ? 0.5 : 0.6,
+                    ease: "easeOut",
                   }}
-                  className="appearance-none rounded-full border-[3px] border-slate-900 bg-white px-4 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-slate-900 shadow-[6px_6px_0_rgba(15,23,42,0.18)] focus:outline-none sm:text-xs"
+                  style={{ background: toneGlow }}
+                />
+                <span
+                  aria-hidden="true"
+                  className="text-base leading-none sm:text-lg"
                 >
-                  {toneOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
+                  {activeTone.icon}
+                </span>
+                <span className="truncate">{activeTone.label}</span>
+                <motion.span
+                  initial={false}
+                  animate={{ rotate: toneMenuOpen ? 180 : 0 }}
+                  transition={{ duration: 0.3, ease: "easeOut" }}
+                  className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-900/15 bg-white/80 text-slate-700 sm:h-6 sm:w-6"
+                >
+                  <ChevronDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </motion.span>
+              </motion.button>
+
+              <AnimatePresence>
+                {toneMenuOpen && (
+                  <motion.div
+                    ref={toneMenuRef}
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    role="listbox"
+                    aria-label="Tone selector"
+                    className="absolute bottom-[calc(100%+0.6rem)] left-0 z-50 w-56 max-w-[calc(100vw-2rem)] origin-bottom rounded-[1.3rem] border-[3px] border-slate-900 bg-white/95 p-1.5 shadow-[10px_10px_0_rgba(15,23,42,0.16)] backdrop-blur-sm sm:w-64"
+                  >
+                    {toneOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setToneMenuOpen(false);
+                          commitProfile((prev) => ({
+                            ...prev,
+                            tone: option.value,
+                            lastUpdated: new Date().toISOString(),
+                          }));
+                        }}
+                        role="option"
+                        aria-selected={toneValue === option.value}
+                        className={`group flex w-full items-center rounded-2xl border border-transparent px-3 py-1.5 text-left text-[0.68rem] font-bold uppercase tracking-[0.2em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/80 sm:text-[0.72rem] ${
+                          option.value === toneValue
+                            ? "border-slate-900/20 bg-slate-50/90"
+                            : "hover:border-slate-900/20 hover:bg-slate-50/60"
+                        }`}
+                      >
+                        <span className="truncate text-slate-800">
+                          {option.label}
+                        </span>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {stage === "chat" && (
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.94 }}
                 onClick={handleRequestTasks}
-                className="inline-flex items-center gap-2 rounded-full border-[3px] border-slate-900 bg-linear-to-r from-[#C9F0FF] via-[#E4E8FF] to-[#FFE5F3] px-3 py-1 text-[0.65rem] font-bold uppercase tracking-[0.22em] text-slate-900 shadow-[8px_8px_0_rgba(15,23,42,0.18)]"
+                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border-[3px] border-slate-900 bg-linear-to-r from-[#C9F0FF] via-[#E4E8FF] to-[#FFE5F3] px-3 py-1 text-[0.58rem] font-black uppercase tracking-[0.2em] text-slate-900 shadow-[6px_6px_0_rgba(15,23,42,0.15)] sm:px-3.5 sm:py-1.5 sm:text-[0.66rem]"
                 disabled={isTyping}
               >
-                <Sparkles className="h-4 w-4" />
+                <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Tasks
               </motion.button>
             )}
           </div>
 
-          <div className="grid grid-cols-[1fr_auto] items-center gap-3">
-            <input
-              type="text"
+          <div className="grid grid-cols-[1fr_auto] items-end gap-2 sm:gap-3">
+            <textarea
+              ref={inputRef}
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter") {
+                if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   handleSend();
                 }
@@ -645,23 +862,18 @@ export default function ChatPage() {
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               placeholder={inputPlaceholder}
-              className="h-11 rounded-full bg-transparent px-4 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none sm:h-14 sm:text-base"
+              rows={1}
+              className="max-h-52 min-h-[2.75rem] w-full resize-none rounded-2xl border border-transparent bg-transparent px-3.5 py-2 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-slate-300 focus:shadow-[0_0_0_2px_rgba(15,23,42,0.12)] sm:min-h-[3.5rem] sm:px-4 sm:py-2.5 sm:text-base"
               disabled={isTyping || stage === "quiz"}
             />
             <button
               onClick={handleSend}
               disabled={isTyping || stage === "quiz"}
-              className="flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-slate-900 bg-linear-to-br from-[#FFE5A5] via-[#FFC1DB] to-[#C9F0FF] shadow-[8px_8px_0_rgba(15,23,42,0.16)] disabled:opacity-60 sm:h-12 sm:w-12"
+              className="flex h-10 w-10 items-center justify-center rounded-full border-[3px] border-slate-900 bg-linear-to-br from-[#FFE5A5] via-[#FFC1DB] to-[#C9F0FF] shadow-[8px_8px_0_rgba(15,23,42,0.16)] disabled:opacity-60 sm:h-12 sm:w-12"
             >
               <SendHorizonal className="h-5 w-5 text-slate-900" />
             </button>
           </div>
-
-          {stage === "chat" && (
-            <p className="mt-2 text-[0.65rem] font-semibold uppercase tracking-[0.24em] text-slate-400 sm:text-[0.7rem]">
-              {toneOptions.find((option) => option.value === toneValue)?.helper}
-            </p>
-          )}
         </motion.div>
       </footer>
 
@@ -723,6 +935,208 @@ export default function ChatPage() {
     });
     return nextProfile;
   }
+}
+
+type MessageSegment =
+  | { type: "paragraph"; lines: string[] }
+  | { type: "ordered-list"; lines: string[] }
+  | { type: "unordered-list"; lines: string[] };
+
+function sanitizeStoredMessages(raw: string): ChatMessage[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const candidate = item as Partial<ChatMessage> & {
+          actions?: Array<Partial<MessageAction>>;
+        };
+
+        const role =
+          candidate.role === "ai" || candidate.role === "user"
+            ? candidate.role
+            : null;
+        const text = typeof candidate.text === "string" ? candidate.text : null;
+        if (!role || !text) return null;
+
+        const actions = Array.isArray(candidate.actions)
+          ? candidate.actions
+              .map((action) => {
+                if (!action || typeof action !== "object") return null;
+                const label =
+                  typeof action.label === "string"
+                    ? action.label.slice(0, 48)
+                    : null;
+                const href =
+                  typeof action.href === "string" ? action.href : null;
+                if (!label || !href) return null;
+                return { label, href } as MessageAction;
+              })
+              .filter(Boolean)
+          : undefined;
+
+        const variant = candidate.variant === "tasks" ? "tasks" : undefined;
+
+        return {
+          role,
+          text,
+          actions: actions && actions.length > 0 ? actions : undefined,
+          variant,
+        } as ChatMessage;
+      })
+      .filter((message): message is ChatMessage => Boolean(message));
+  } catch {
+    return [];
+  }
+}
+
+function getToneGlow(tone: string) {
+  switch (tone) {
+    case "spiritual":
+      return "radial-gradient(120% 120% at 20% 20%, rgba(209, 231, 255, 0.8), rgba(215, 255, 240, 0.15) 65%)";
+    case "coach":
+      return "radial-gradient(120% 120% at 80% 20%, rgba(201, 240, 255, 0.75), rgba(255, 234, 215, 0.18) 60%)";
+    default:
+      return "radial-gradient(130% 130% at 50% 10%, rgba(255, 224, 181, 0.75), rgba(255, 201, 219, 0.18) 62%)";
+  }
+}
+
+function renderCodeBlock(text: string) {
+  return (
+    <pre className="whitespace-pre-wrap text-sm leading-relaxed sm:text-base">
+      {text}
+    </pre>
+  );
+}
+
+function renderMessageSegments(text: string, isAI: boolean) {
+  const cleanText = text.trim();
+  if (!cleanText) {
+    return <span>{text}</span>;
+  }
+
+  const segments = parseMessageSegments(cleanText);
+  if (segments.length === 0) {
+    return <span>{cleanText}</span>;
+  }
+
+  return segments.map((segment, index) => {
+    if (segment.type === "paragraph") {
+      return (
+        <p
+          key={`paragraph-${index}`}
+          className="mb-1.5 last:mb-0 leading-relaxed"
+        >
+          {segment.lines.map((line, lineIndex) => (
+            <span key={`line-${index}-${lineIndex}`}>
+              {line}
+              {lineIndex < segment.lines.length - 1 ? <br /> : null}
+            </span>
+          ))}
+        </p>
+      );
+    }
+
+    if (segment.type === "ordered-list") {
+      return (
+        <ol key={`ordered-${index}`} className="space-y-2 pt-1">
+          {segment.lines.map((line, itemIndex) => (
+            <motion.li
+              key={`ordered-${index}-${itemIndex}`}
+              className="relative flex items-start gap-3 rounded-2xl border border-slate-900/10 bg-white/85 px-4 py-2 text-left text-slate-800 shadow-[4px_4px_0_rgba(15,23,42,0.06)]"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, delay: itemIndex * 0.04 }}
+            >
+              <span
+                className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-900/15 bg-linear-to-br from-[#FDF5FF] via-[#E4F0FF] to-[#FFF2E0] text-[0.65rem] font-bold text-slate-700 ${
+                  isAI ? "shadow-[0_3px_0_rgba(15,23,42,0.12)]" : ""
+                }`}
+              >
+                {itemIndex + 1}
+              </span>
+              <span className="leading-relaxed">{line}</span>
+            </motion.li>
+          ))}
+        </ol>
+      );
+    }
+
+    return (
+      <ul key={`unordered-${index}`} className="space-y-2 pt-1">
+        {segment.lines.map((line, itemIndex) => (
+          <motion.li
+            key={`unordered-${index}-${itemIndex}`}
+            className="relative flex items-start gap-3 rounded-2xl border border-slate-900/10 bg-white/85 px-4 py-2 text-left text-slate-800 shadow-[4px_4px_0_rgba(15,23,42,0.06)]"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, delay: itemIndex * 0.05 }}
+          >
+            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#FFD8F6] via-[#E7F2FF] to-[#FFE8CC] text-[0.65rem] font-semibold text-slate-700">
+              ✶
+            </span>
+            <span className="leading-relaxed">{line}</span>
+          </motion.li>
+        ))}
+      </ul>
+    );
+  });
+}
+
+function parseMessageSegments(text: string): MessageSegment[] {
+  const normalised = text.replace(/\r\n/g, "\n");
+  const lines = normalised.split("\n");
+  const segments: MessageSegment[] = [];
+
+  let current: MessageSegment | null = null;
+
+  const flush = () => {
+    if (!current) return;
+    if (current.lines.length === 0) {
+      current = null;
+      return;
+    }
+    segments.push(current);
+    current = null;
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flush();
+      return;
+    }
+
+    const orderedMatch = trimmed.match(/^(\d+)[\.)]\s+(.*)$/);
+    if (orderedMatch) {
+      if (!current || current.type !== "ordered-list") {
+        flush();
+        current = { type: "ordered-list", lines: [] };
+      }
+      current.lines.push(orderedMatch[2].trim());
+      return;
+    }
+
+    const unorderedMatch = trimmed.match(/^[-•*]\s+(.*)$/);
+    if (unorderedMatch) {
+      if (!current || current.type !== "unordered-list") {
+        flush();
+        current = { type: "unordered-list", lines: [] };
+      }
+      current.lines.push(unorderedMatch[1].trim());
+      return;
+    }
+
+    if (!current || current.type !== "paragraph") {
+      flush();
+      current = { type: "paragraph", lines: [] };
+    }
+    current.lines.push(trimmed);
+  });
+
+  flush();
+  return segments;
 }
 
 type ApiChatRequest = {
