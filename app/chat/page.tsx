@@ -728,7 +728,7 @@ export default function ChatPage() {
       {showScrollToBottom && (
         <motion.button
           onClick={() => scrollToBottom()}
-          className="fixed bottom-24 left-1/2 z-50 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border-[3px] border-slate-900 bg-linear-to-r from-[#FFE5A5] via-[#FFC1DB] to-[#C9F0FF] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-900 shadow-[10px_10px_0_rgba(15,23,42,0.18)] sm:bottom-26 sm:right-12 sm:left-auto sm:translate-x-0"
+          className="fixed bottom-40 right-5 z-50 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border-[3px] border-slate-900 bg-linear-to-r from-[#FFE5A5] via-[#FFC1DB] to-[#C9F0FF] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-900 shadow-[10px_10px_0_rgba(15,23,42,0.18)] sm:bottom-26 sm:right-12 sm:left-auto sm:translate-x-0"
           whileHover={{ scale: 1.05, y: -2 }}
           whileTap={{ scale: 0.93 }}
         >
