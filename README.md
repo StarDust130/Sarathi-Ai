@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🪷✨ Sarathi AI — Your Calm, Krishna-Inspired Digital Companion 💬🤖  
 
-## Getting Started
+> “You have the right to perform your duty, but not to the fruits of your actions.” – *Bhagavad Gita 2.47*
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🌍 About the Project  
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Sarathi AI** is your personal AI guide — inspired by the wisdom of **Lord Krishna**.  
+It listens, understands, and speaks to you like a *calm friend* — helping you manage **stress, overthinking, and emotional struggles** with wisdom from the *Bhagavad Gita*, adapted for modern life.  
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+💭 Whether you’re feeling anxious before a hackathon, stuck in confusion, or just need peace — **Sarathi** listens, reflects, and helps you find clarity.  
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 🎯 What Problem It Solves  
 
-To learn more about Next.js, take a look at the following resources:
+😞 Many people today feel **lost, stressed, or disconnected** — they need comfort, not just conversation.  
+🧘‍♂️ Sarathi acts like a **spiritual yet friendly companion** who understands emotion and offers perspective.  
+✨ It blends **AI empathy + Gita philosophy** to give personalized, meaningful guidance — not generic chatbot replies.  
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🧠 Core Features  
 
-## Deploy on Vercel
+### 💬 Voice + Chat Interaction  
+Talk naturally — Sarathi listens with **Whisper Turbo**, thinks using **Groq Llama**, and speaks back instantly via **ElevenLabs AI Voice**.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 🧘 Guided Emotional Support  
+Sarathi gently asks questions, understands your mental state, and provides support or small actionable advice (like journaling or self-care).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 📘 Personal Journal with Karma Points  
+Users maintain a daily **Journal**, where AI adds mindful tasks (“Drink water 💧”, “Take a deep breath 🌬️”).  
+You earn **Karma Points 🪙** for completing them — reinforcing growth through small habits.
+
+### 🧩 Personalization  
+- Remembers your name  
+- Adapts tone (🧑‍🤝‍🧑 *Friendly*, 🕉️ *Spiritual*)  
+- Saves sessions locally  
+
+---
+
+## 🏗️ Tech Stack  
+
+| Layer | Tools & Frameworks |
+|-------|--------------------|
+| 🖥️ **Frontend** | Next.js 14, React, Tailwind CSS, Framer Motion |
+| 🧩 **Backend** | Next.js Edge API Routes |
+| 🗣️ **Voice AI** | Whisper Turbo (Speech-to-Text), ElevenLabs (Text-to-Speech) |
+| 🧠 **LLM** | Groq Llama 3.1 (Fast inference for calm, wise replies) |
+| 💾 **Storage** | Local Storage (user data + journal) |
+| 🔐 **Auth (optional)** | Clerk / Supabase (future integration) |
+
+---
+
+## ⚙️ How It Works  
+
+```mermaid
+graph LR
+A[🎙️ User Speaks] --> B(🎧 Whisper Turbo - Transcribes)
+B --> C(🧠 Groq Llama - Understands + Replies)
+C --> D(🗣️ ElevenLabs - Converts to Voice)
+D --> E(💬 User Hears Calm Response)
+E --> F(📔 Journal - Logs insights + tasks)
