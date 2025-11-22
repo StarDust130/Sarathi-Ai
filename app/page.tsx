@@ -377,13 +377,7 @@ export default function Home() {
         </motion.blockquote>
       </div>
 
-      <Link
-        href="/chat"
-        className="fixed bottom-4 left-1/2 z-30 inline-flex -translate-x-1/2 items-center gap-3 rounded-full border-4 border-slate-900 bg-[#FFD07F] px-6 py-3 text-xs font-black uppercase tracking-[0.24em] text-slate-900 shadow-[12px_12px_0px_rgba(15,23,42,0.36)] transition-transform duration-150 hover:-translate-y-1 md:hidden"
-      >
-        Quick Chat
-        <span className="text-lg leading-none">🚀</span>
-      </Link>
+
 
       <style jsx>{`
         :global(body) {
