@@ -39,19 +39,15 @@ type FloatingGlyph = {
   duration: number;
 };
 
-type HighlightPillar = {
-  id: number;
-  icon: string;
-  title: string;
-  description: string;
-  accent: string;
-};
-
-
-
-const localGallery = ["/4.jpg", "/5.jpg", "/6.jpg", "/1.jpg", "/2.jpg", "/3.jpg"];
-
-const frames = [ ...localGallery];
+const localGallery = [
+  "/4.jpg",
+  "/5.jpg",
+  "/6.jpg",
+  "/1.jpg",
+  "/2.jpg",
+  "/3.jpg",
+];
+const frames = [...localGallery];
 
 const auroraStrips: AuroraStrip[] = [
   {
@@ -59,8 +55,8 @@ const auroraStrips: AuroraStrip[] = [
     className:
       "top-[-12rem] left-[-10rem] h-[30rem] w-[32rem] bg-gradient-to-br from-[#A5B4FC]/60 via-[#F0ABFC]/45 to-transparent",
     motion: {
-      x: [-80, 40, -60],
-      y: [-60, 120, -40],
+      x: [-40, 20, -30],
+      y: [-30, 60, -20],
       rotate: [8, -10, 8],
     },
     duration: 30,
@@ -71,8 +67,8 @@ const auroraStrips: AuroraStrip[] = [
     className:
       "bottom-[-14rem] left-[18%] h-[28rem] w-[28rem] bg-gradient-to-tr from-[#FF9EAA]/55 via-[#FFD07F]/45 to-transparent",
     motion: {
-      x: [-40, 80, -30],
-      y: [40, -80, 50],
+      x: [-20, 40, -15],
+      y: [20, -40, 25],
       rotate: [4, -6, 4],
     },
     duration: 26,
@@ -83,8 +79,8 @@ const auroraStrips: AuroraStrip[] = [
     className:
       "top-[-8rem] right-[-12rem] h-[32rem] w-[36rem] bg-gradient-to-bl from-[#7DD3FC]/50 via-[#A5B4FC]/45 to-transparent",
     motion: {
-      x: [120, -60, 90],
-      y: [-50, 110, -30],
+      x: [60, -30, 45],
+      y: [-25, 55, -15],
       rotate: [-6, 6, -6],
     },
     duration: 32,
@@ -135,38 +131,13 @@ const floatingGlyphs: FloatingGlyph[] = [
   },
 ];
 
-const highlightPillars: HighlightPillar[] = [
-  {
-    id: 1,
-    icon: "🪷",
-    title: "Daily Lotus Journal",
-    description:
-      "Capture reflections with guided prompts synced to Sarathi's wisdom.",
-    accent: "bg-gradient-to-br from-[#FFF5B8]/70 via-white/50 to-transparent",
-  },
-  {
-    id: 2,
-    icon: "🎧",
-    title: "Voice Temple",
-    description:
-      "Slip into meditative conversations with immersive soundscapes.",
-    accent: "bg-gradient-to-br from-[#A5B4FC]/60 via-white/40 to-transparent",
-  },
-  {
-    id: 3,
-    icon: "✨",
-    title: "Cosmic Gallery",
-    description: "Explore living art frames that mirror your journey inward.",
-    accent: "bg-gradient-to-br from-[#FF9EAA]/55 via-white/40 to-transparent",
-  },
-];
-
 export default function Home() {
   const [flowers, setFlowers] = useState<Flower[]>([]);
 
   useEffect(() => {
+    // Optimized count for mobile
     setFlowers(
-      Array.from({ length: 18 }).map((_, i) => ({
+      Array.from({ length: 7 }).map((_, i) => ({
         id: i,
         left: Math.random() * 100,
         top: -Math.random() * 120,
@@ -180,12 +151,14 @@ export default function Home() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#ECF1FF] text-slate-900 selection:bg-[#FFF5B8]/70 selection:text-slate-900">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rotate-6 rounded-[5rem] border-4 border-slate-900 bg-gradient-to-br from-[#FF9EAA] via-[#FFD07F] to-[#FFF5B8] shadow-[22px_22px_0px_rgba(15,23,42,0.34)] animate-levitate-slow" />
-        <div className="absolute bottom-[-14rem] right-[-6rem] h-[30rem] w-[26rem] -rotate-3 rounded-[4rem] border-4 border-slate-900 bg-gradient-to-br from-[#A5B4FC] via-[#7DD3FC] to-[#F0ABFC] shadow-[18px_18px_0px_rgba(15,23,42,0.28)] animate-levitate-fast" />
+        {/* Background Blobs with GPU acceleration */}
+        <div className="absolute -top-40 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rotate-6 rounded-[5rem] border-4 border-slate-900 bg-gradient-to-br from-[#FF9EAA] via-[#FFD07F] to-[#FFF5B8] shadow-[22px_22px_0px_rgba(15,23,42,0.34)] animate-levitate-slow transform-gpu will-change-transform" />
+        <div className="absolute bottom-[-14rem] right-[-6rem] h-[30rem] w-[26rem] -rotate-3 rounded-[4rem] border-4 border-slate-900 bg-gradient-to-br from-[#A5B4FC] via-[#7DD3FC] to-[#F0ABFC] shadow-[18px_18px_0px_rgba(15,23,42,0.28)] animate-levitate-fast transform-gpu will-change-transform" />
+
         {auroraStrips.map((strip) => (
           <motion.div
             key={strip.id}
-            className={`absolute -z-10 rounded-[5rem] ${strip.className} blur-[160px]`}
+            className={`absolute -z-10 rounded-[5rem] ${strip.className} blur-[120px] transform-gpu will-change-transform`}
             animate={{
               x: strip.motion.x,
               y: strip.motion.y,
@@ -204,7 +177,7 @@ export default function Home() {
         {floatingGlyphs.map((glyph) => (
           <motion.span
             key={glyph.id}
-            className={`absolute z-20 font-semibold mix-blend-overlay ${glyph.color}`}
+            className={`absolute z-20 font-semibold mix-blend-overlay ${glyph.color} transform-gpu`}
             style={{
               top: glyph.top,
               left: glyph.left,
@@ -234,7 +207,7 @@ export default function Home() {
       {flowers.map((flower) => (
         <motion.div
           key={flower.id}
-          className="absolute z-10 select-none"
+          className="absolute z-10 select-none transform-gpu"
           style={{
             left: `${flower.left}%`,
             top: `${flower.top}px`,
@@ -251,6 +224,7 @@ export default function Home() {
             delay: flower.delay,
             repeat: Infinity,
             repeatType: "loop",
+            ease: "linear",
           }}
         >
           🌸
@@ -258,17 +232,18 @@ export default function Home() {
       ))}
 
       <motion.div
-        className="absolute left-1/2 top-1/2 z-0 h-[1000px] w-[1000px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-tr from-[#fdd835]/35 via-[#ffb74d]/45 to-[#ffc8dd]/35 blur-[180px]"
+        className="absolute left-1/2 top-1/2 z-0 h-[1000px] w-[1000px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-tr from-[#fdd835]/35 via-[#ffb74d]/45 to-[#ffc8dd]/35 blur-[180px] transform-gpu will-change-transform"
         animate={{ scale: [1, 1.08, 1], opacity: [0.5, 0.7, 0.5] }}
         transition={{ duration: 12, repeat: Infinity, repeatType: "mirror" }}
       />
 
       <div className="relative z-20 mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center gap-16 px-4 pb-24 pt-16 sm:px-8">
         <header className="flex w-full flex-col items-center gap-8 text-center">
+          {/* 1. Badge - FAST */}
           <motion.div
             initial={{ opacity: 0, y: -20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+            transition={{ duration: 0.6, ease: "easeOut" }} // Fast duration
             className="inline-flex items-center gap-3 rounded-full border-4 border-slate-900 bg-gradient-to-r from-[#FFF5B8] to-[#FFD07F] px-5 py-2 text-xs font-black uppercase tracking-[0.28em] text-slate-900 shadow-[12px_12px_0px_rgba(15,23,42,0.32)] sm:text-sm"
           >
             Sarathi AI
@@ -281,19 +256,21 @@ export default function Home() {
             </span>
           </motion.div>
 
+          {/* 2. Title - Fast follow */}
           <motion.h1
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1 }}
+            transition={{ duration: 0.6, delay: 0.1 }} // Reduced delay and duration
             className="flex flex-wrap items-center justify-center gap-3 text-[3rem] font-black leading-[1.05] tracking-tight text-slate-900 sm:text-[3.5rem] md:text-[4rem]"
           >
-            🪷 Sarathi AI 
+            🪷 Sarathi AI
           </motion.h1>
 
+          {/* 3. Description - Fast follow */}
           <motion.p
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, delay: 0.2 }}
+            transition={{ duration: 0.6, delay: 0.2 }} // Reduced delay
             className="max-w-3xl text-base font-medium text-slate-600 sm:text-lg md:text-xl"
           >
             Glide into serene dialogues guided by glowing synthwave art,
@@ -301,7 +278,13 @@ export default function Home() {
             with your AI Sarathi to break your inner loop and find calm.
           </motion.p>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
+          {/* 4. BUTTONS - ANIMATED (This fixes the glitch) */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }} // Start hidden
+            animate={{ opacity: 1, y: 0 }} // Fade in
+            transition={{ duration: 0.6, delay: 0.3 }} // Appear AFTER text
+            className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center"
+          >
             <Link
               href="/chat"
               className="inline-flex items-center justify-center gap-3 rounded-full border-4 border-slate-900 bg-[#FFF5B8] px-7 py-3 text-sm font-black uppercase tracking-[0.2em] text-slate-900 shadow-[12px_12px_0px_rgba(15,23,42,0.32)] transition-transform duration-200 hover:-translate-y-1 hover:-rotate-1 sm:text-base"
@@ -323,7 +306,7 @@ export default function Home() {
               Sarathi Journal
               <span className="text-2xl leading-none">📝</span>
             </Link>
-          </div>
+          </motion.div>
         </header>
 
         <section className="w-full">
@@ -334,17 +317,20 @@ export default function Home() {
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.2 }}
-                transition={{ duration: 0.6, delay: idx * 0.08 }}
+                transition={{ duration: 0.5, delay: idx * 0.1 }} // Sped up gallery load
                 className="group relative overflow-hidden rounded-[2.6rem] border-4 border-slate-900 bg-[#FDF9F0] shadow-[18px_18px_0px_rgba(15,23,42,0.32)] transition-transform duration-200 hover:-translate-y-3"
               >
                 <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent opacity-0 transition duration-300 group-hover:opacity-100" />
+
                 <Image
                   src={src}
                   alt={`Krishna artwork ${idx + 1}`}
                   width={900}
                   height={1100}
+                  sizes="(max-width: 768px) 100vw, 33vw"
                   className="h-[22rem] w-full object-cover sm:h-[26rem]"
                 />
+
                 <div className="absolute bottom-6 left-6 rounded-full border-4 border-slate-900 bg-white/90 px-4 py-2 text-[0.7rem] font-bold uppercase tracking-[0.24em] text-slate-900 shadow-[10px_10px_0px_rgba(15,23,42,0.32)]">
                   Cosmic Frame {idx + 1}
                 </div>
@@ -357,7 +343,7 @@ export default function Home() {
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true, amount: 0.4 }}
-          transition={{ duration: 1.2, delay: 0.4 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
           className="text-center text-[#5a4211]"
         >
           <p className="text-lg italic">
@@ -372,8 +358,6 @@ export default function Home() {
           </p>
         </motion.blockquote>
       </div>
-
-
 
       <style jsx>{`
         :global(body) {
