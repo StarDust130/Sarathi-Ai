@@ -47,15 +47,11 @@ type HighlightPillar = {
   accent: string;
 };
 
-const remoteGallery = [
-  "https://i.pinimg.com/736x/a3/cb/2e/a3cb2eb5454b12943eaf71f87fb88300.jpg",
-  "https://i.pinimg.com/1200x/c9/94/07/c99407ad3ee6e24caa43dcb92936a463.jpg",
-  "https://i.pinimg.com/736x/9c/39/3f/9c393f764af83200e6afa5f63eef1b00.jpg",
-];
 
-const localGallery = ["/1.jpg", "/2.jpg", "/3.jpg"];
 
-const frames = [...remoteGallery, ...localGallery];
+const localGallery = ["/4.jpg", "/5.jpg", "/6.jpg", "/1.jpg", "/2.jpg", "/3.jpg"];
+
+const frames = [ ...localGallery];
 
 const auroraStrips: AuroraStrip[] = [
   {
