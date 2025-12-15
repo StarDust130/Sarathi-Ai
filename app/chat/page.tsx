@@ -105,21 +105,21 @@ const toneOptions: ToneOption[] = [
 const quizQuestions: QuizQuestion[] = [
   {
     id: "energy",
-    prompt: "How does your energy feel in this moment?",
-    helper: "Choose what resonates or add your own words",
-    options: ["Tender", "Steady", "Scattered", "Bright"],
+    prompt: "How do you feel right now?",
+    helper: "Pick one or type your own",
+    options: ["Low", "Okay", "Restless", "Good"],
     allowText: true,
   },
   {
     id: "focus",
-    prompt: "Which area of life is asking for the most love today?",
-    options: ["Body", "Heart", "Mind", "Work"],
+    prompt: "What part of life needs help today?",
+    options: ["Body", "Feelings", "Mind", "Work/School"],
     allowText: true,
   },
   {
     id: "support",
-    prompt: "What kind of support would feel nourishing right now?",
-    options: ["Clarity", "Encouragement", "Grounding", "Surprise me"],
+    prompt: "What do you want from me now?",
+    options: ["Clear steps", "Kind words", "Calm down", "Surprise me"],
     allowText: true,
   },
 ];
@@ -225,7 +225,7 @@ export default function ChatPage() {
     if (!profileLoaded || stage !== "problem") return;
     const prompt = `Thanks for pausing with me${
       profile?.name ? `, ${profile.name}` : ""
-    }. What's feeling heaviest for you right now?`;
+    }. What is your main worry right now?`;
     setMessages((prev) => {
       if (prev.some((msg) => msg.role === "ai" && msg.text === prompt))
         return prev;
@@ -311,7 +311,7 @@ export default function ChatPage() {
     if (stage === "name") {
       const cleanName = sanitizeName(text);
       if (!cleanName) {
-        setError("Please share a name so I know what to call you.");
+        setError("Please tell me a name so I can call you.");
         return;
       }
 
@@ -320,7 +320,7 @@ export default function ChatPage() {
         { role: "user", text },
         {
           role: "ai",
-          text: `Great to meet you, ${cleanName}. Let's do a quick check-in together.`,
+          text: `Nice to meet you, ${cleanName}. Let's do a short check together.`,
         },
       ]);
 
@@ -554,7 +554,7 @@ export default function ChatPage() {
     stage === "name"
       ? "What name should I call you?"
       : stage === "problem"
-      ? "What feels most important to talk about today?"
+      ? "What is your main worry today?"
       : "Tell me what's on your mind...";
 
   useEffect(() => {
@@ -1050,19 +1050,19 @@ function getInitialMessageForStage(
   const name = profile?.name?.trim();
   switch (stage) {
     case "name":
-      return "Hi friend, what name would you like me to use for you?";
+      return "Hi friend. What name should I call you?";
     case "quiz":
       return name
-        ? `Welcome back, ${name}. Let's do a quick check-in so I can understand how you're feeling today.`
-        : "Welcome back. Let's do a quick check-in so I can understand how you're feeling today.";
+        ? `Welcome back, ${name}. Let's do a quick check so I know how you feel.`
+        : "Welcome back. Let's do a quick check so I know how you feel.";
     case "problem":
       return name
-        ? `Thanks for trusting me, ${name}. What's the one thing weighing on you that we should talk about first?`
-        : "Thanks for trusting me. What's the one thing weighing on you that we should talk about first?";
+        ? `Thanks for sharing with me, ${name}. What is your main worry right now?`
+        : "Thanks for sharing with me. What is your main worry right now?";
     case "chat":
       return name
-        ? `I'm here, ${name}. What would you like to explore together right now?`
-        : "I'm here. What would you like to explore together right now?";
+        ? `I'm here, ${name}. What do you want to talk about now?`
+        : "I'm here. What do you want to talk about now?";
     default:
       return null;
   }
