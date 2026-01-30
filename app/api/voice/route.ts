@@ -14,25 +14,24 @@ const GROQ_API_BASE =
 
 const MAX_HISTORY_TURNS = 4;
 
+// Free ElevenLabs voices that work on free plan (pre-made voices)
+// Rachel (warm female), Mimi (childish/gentle), Drew (male news), Fin (energetic Irish), Clyde (deep male)
 const VOICE_MAP: Record<ToneValue, string> = {
-  warm: process.env.ELEVENLABS_WARM_VOICE_ID || "CX1mcqJxcZzy2AsgaBjn",
+  // Rachel - warm, friendly female American voice
+  warm: process.env.ELEVENLABS_WARM_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
+  // Mimi - soft, gentle childish animation voice (spiritual/calm)
   spiritual:
-    process.env.ELEVENLABS_SPIRITUAL_VOICE_ID ||
-    process.env.ELEVENLABS_VOICE_ID ||
-    "PLFXYRTU74HpuNdj6oDl",
-  coach: process.env.ELEVENLABS_COACH_VOICE_ID || "ADwIQE9uvyqQvKfuWFE8",
+    process.env.ELEVENLABS_SPIRITUAL_VOICE_ID || "zrHiDhphv9ZnVXBqCLjz",
+  // Drew - clear, confident male American news voice
+  coach: process.env.ELEVENLABS_COACH_VOICE_ID || "29vD33N1CtxCmqQRPOHJ",
 };
 
+// For Hindi content, use the same free voices (they support multilingual)
 const HINDI_VOICE_MAP: Record<ToneValue, string | undefined> = {
-  warm:
-    process.env.ELEVENLABS_HINDI_WARM_VOICE_ID ||
-    process.env.ELEVENLABS_HINDI_VOICE_ID,
+  warm: process.env.ELEVENLABS_HINDI_WARM_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
   spiritual:
-    process.env.ELEVENLABS_HINDI_SPIRITUAL_VOICE_ID ||
-    process.env.ELEVENLABS_HINDI_VOICE_ID,
-  coach:
-    process.env.ELEVENLABS_HINDI_COACH_VOICE_ID ||
-    process.env.ELEVENLABS_HINDI_VOICE_ID,
+    process.env.ELEVENLABS_HINDI_SPIRITUAL_VOICE_ID || "zrHiDhphv9ZnVXBqCLjz",
+  coach: process.env.ELEVENLABS_HINDI_COACH_VOICE_ID || "29vD33N1CtxCmqQRPOHJ",
 };
 
 const toneDirections: Record<ToneValue, string> = {
@@ -76,27 +75,27 @@ const parseHistoryTurns = (raw: FormDataEntryValue | null): HistoryTurn[] => {
         if (!turn || typeof turn !== "object") return null;
         const user = clamp(
           String((turn as Record<string, unknown>).user ?? ""),
-          480
+          480,
         );
         const assistant = clamp(
           String((turn as Record<string, unknown>).assistant ?? ""),
-          480
+          480,
         );
         if (!user || !assistant) return null;
         const tone = resolveTone(
-          (turn as Record<string, unknown>).tone as FormDataEntryValue
+          (turn as Record<string, unknown>).tone as FormDataEntryValue,
         );
         const languageRaw = String(
-          (turn as Record<string, unknown>).language ?? ""
+          (turn as Record<string, unknown>).language ?? "",
         ).toLowerCase();
         const language: TranscriptLanguage =
           languageRaw === "hindi"
             ? "hindi"
             : languageRaw === "hinglish"
-            ? "hinglish"
-            : languageRaw === "english"
-            ? "english"
-            : "hinglish";
+              ? "hinglish"
+              : languageRaw === "english"
+                ? "english"
+                : "hinglish";
         return { user, assistant, tone, language };
       })
       .filter(Boolean) as HistoryTurn[];
@@ -167,11 +166,11 @@ const detectTranscriptLanguage = (text: string): TranscriptLanguage => {
 
   const hindiScore = hindiSignals.reduce(
     (score, signal) => (lower.includes(signal) ? score + 1 : score),
-    0
+    0,
   );
   const englishScore = englishSignals.reduce(
     (score, signal) => (lower.includes(signal) ? score + 1 : score),
-    0
+    0,
   );
 
   if (hindiScore > englishScore) {
@@ -259,7 +258,7 @@ export async function POST(request: Request) {
   if (!groqKey || !elevenKey) {
     return NextResponse.json(
       { error: "Voice service is missing required API keys." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -269,7 +268,7 @@ export async function POST(request: Request) {
     if (!file || !(file instanceof File)) {
       return NextResponse.json(
         { error: "Audio file not found in request." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -291,7 +290,7 @@ export async function POST(request: Request) {
           Authorization: `Bearer ${groqKey}`,
         },
         body: audioForm,
-      }
+      },
     );
 
     if (!transcriptionRes.ok) {
@@ -299,11 +298,11 @@ export async function POST(request: Request) {
       console.error(
         "[voice-api] transcription error",
         transcriptionRes.status,
-        errText
+        errText,
       );
       return NextResponse.json(
         { error: "Unable to transcribe audio." },
-        { status: 422 }
+        { status: 422 },
       );
     }
 
@@ -322,17 +321,20 @@ export async function POST(request: Request) {
     if (!transcriptText) {
       return NextResponse.json(
         { error: "I could not hear any words—try again." },
-        { status: 422 }
+        { status: 422 },
       );
     }
 
     const talkMode = getTalkMode();
     const isLong = talkMode !== "short";
     const initialLanguage = detectTranscriptLanguage(transcriptText);
-    const historyLanguageTally = historyTurns.reduce((acc, turn) => {
-      acc[turn.language] = (acc[turn.language] || 0) + 1;
-      return acc;
-    }, {} as Record<TranscriptLanguage, number>);
+    const historyLanguageTally = historyTurns.reduce(
+      (acc, turn) => {
+        acc[turn.language] = (acc[turn.language] || 0) + 1;
+        return acc;
+      },
+      {} as Record<TranscriptLanguage, number>,
+    );
     let language = initialLanguage;
     const hindiWeight = historyLanguageTally.hindi ?? 0;
     const hinglishWeight = historyLanguageTally.hinglish ?? 0;
@@ -388,11 +390,11 @@ export async function POST(request: Request) {
       console.error(
         "[voice-api] completion error",
         completionRes.status,
-        errText
+        errText,
       );
       return NextResponse.json(
         { error: "Unable to craft a reply. Try again." },
-        { status: 502 }
+        { status: 502 },
       );
     }
 
@@ -443,15 +445,46 @@ export async function POST(request: Request) {
           output_format: outputFormat,
           voice_settings: voiceSettings,
         }),
-      }
+      },
     );
 
     if (!ttsRes.ok) {
       const errText = await ttsRes.text().catch(() => "");
       console.error("[voice-api] elevenlabs error", ttsRes.status, errText);
+
+      // Check if this is a payment/quota issue (402 Payment Required)
+      if (ttsRes.status === 402) {
+        return NextResponse.json(
+          {
+            error: "Voice quota exceeded",
+            code: "VOICE_QUOTA_EXCEEDED",
+            reply,
+            transcript: transcriptText,
+            language,
+            tone,
+          },
+          { status: 402 },
+        );
+      }
+
+      // Check for 401 - unusual activity / free tier blocked
+      if (ttsRes.status === 401) {
+        return NextResponse.json(
+          {
+            error: "Voice service temporarily unavailable",
+            code: "VOICE_SERVICE_BLOCKED",
+            reply,
+            transcript: transcriptText,
+            language,
+            tone,
+          },
+          { status: 401 },
+        );
+      }
+
       return NextResponse.json(
-        { error: "Unable to generate voice reply." },
-        { status: 502 }
+        { error: "ElevenLabs API limit reached. 🔄⏳" },
+        { status: 502 },
       );
     }
 
@@ -471,7 +504,7 @@ export async function POST(request: Request) {
     console.error("[voice-api] unexpected", error);
     return NextResponse.json(
       { error: "Voice processing failed. Please try again." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

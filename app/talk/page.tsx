@@ -5,7 +5,14 @@ import { motion, AnimatePresence, type Transition } from "framer-motion";
 import Link from "next/link";
 import { ChevronLeft, ChevronDown, NotebookPen } from "lucide-react";
 
-type Status = "idle" | "recording" | "processing" | "speaking" | "error";
+type Status =
+  | "idle"
+  | "recording"
+  | "processing"
+  | "speaking"
+  | "error"
+  | "quota-exceeded"
+  | "service-blocked";
 
 type ToneValue = "warm" | "spiritual" | "coach";
 
@@ -118,6 +125,7 @@ const IconAlert = () => (
 export default function VoicePage() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [quotaReply, setQuotaReply] = useState(""); // Store AI reply when quota exceeded
   const [statusLabel, setStatusLabel] = useState("Tap to Speak");
   const [tone, setTone] = useState<ToneValue>("warm");
   const [profileName, setProfileName] = useState("");
@@ -188,6 +196,8 @@ export default function VoicePage() {
       processing: "Thinking...",
       speaking: `Speaking as ${activeTone.label}`,
       error: "Error",
+      "quota-exceeded": "API Limit Reached 😔",
+      "service-blocked": "API Limit Reached 😔",
     };
     setStatusLabel(labelMap[status]);
   }, [status, activeTone.label]);
@@ -312,7 +322,7 @@ export default function VoicePage() {
       ];
 
       const selectedMimeType = preferredMimeTypes.find((type) =>
-        MediaRecorder.isTypeSupported(type)
+        MediaRecorder.isTypeSupported(type),
       );
 
       if (!selectedMimeType) {
@@ -380,7 +390,7 @@ export default function VoicePage() {
             assistant,
             tone: priorTone,
             language: priorLanguage,
-          })
+          }),
         );
       try {
         formData.append("history", JSON.stringify(recentTurns));
@@ -392,6 +402,78 @@ export default function VoicePage() {
     try {
       const res = await fetch("/api/voice", { method: "POST", body: formData });
       const result = await res.json();
+
+      // Handle voice quota exceeded - show text response instead
+      if (res.status === 402 && result?.code === "VOICE_QUOTA_EXCEEDED") {
+        const textReply = typeof result?.reply === "string" ? result.reply : "";
+        const resolvedTranscript =
+          typeof result?.transcript === "string"
+            ? result.transcript.trim()
+            : "";
+
+        if (textReply) {
+          setQuotaReply(textReply);
+          // Still save to history even without voice
+          if (resolvedTranscript && textReply) {
+            const turn: ConversationTurn = {
+              id: `turn-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 6)}`,
+              user: resolvedTranscript,
+              assistant: textReply,
+              timestamp: Date.now(),
+              tone: activeTone.value,
+              language:
+                result?.language === "hindi"
+                  ? "hindi"
+                  : result?.language === "hinglish" ||
+                      result?.language === "english"
+                    ? "hinglish"
+                    : "unknown",
+            };
+            setHistory((prev) => {
+              const next = [...prev, turn];
+              return next.slice(-MAX_HISTORY_TURNS);
+            });
+          }
+        }
+        setStatus("quota-exceeded");
+        return;
+      }
+
+      // Handle voice service blocked (401 - unusual activity detected)
+      if (res.status === 401 && result?.code === "VOICE_SERVICE_BLOCKED") {
+        const textReply = typeof result?.reply === "string" ? result.reply : "";
+        const resolvedTranscript =
+          typeof result?.transcript === "string"
+            ? result.transcript.trim()
+            : "";
+
+        if (textReply) {
+          setQuotaReply(textReply);
+          if (resolvedTranscript && textReply) {
+            const turn: ConversationTurn = {
+              id: `turn-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 6)}`,
+              user: resolvedTranscript,
+              assistant: textReply,
+              timestamp: Date.now(),
+              tone: activeTone.value,
+              language:
+                result?.language === "hindi"
+                  ? "hindi"
+                  : result?.language === "hinglish" ||
+                      result?.language === "english"
+                    ? "hinglish"
+                    : "unknown",
+            };
+            setHistory((prev) => {
+              const next = [...prev, turn];
+              return next.slice(-MAX_HISTORY_TURNS);
+            });
+          }
+        }
+        setStatus("service-blocked");
+        return;
+      }
+
       if (!res.ok) {
         const apiMessage =
           typeof result?.error === "string" ? result.error : null;
@@ -430,9 +512,9 @@ export default function VoicePage() {
             result?.language === "hindi"
               ? "hindi"
               : result?.language === "hinglish" ||
-                result?.language === "english"
-              ? "hinglish"
-              : "unknown",
+                  result?.language === "english"
+                ? "hinglish"
+                : "unknown",
         };
         setHistory((prev) => {
           const next = [...prev, turn];
@@ -454,16 +536,23 @@ export default function VoicePage() {
     else if (status === "error") {
       setStatus("idle");
       setErrorMessage("");
+    } else if (status === "quota-exceeded" || status === "service-blocked") {
+      setStatus("idle");
+      setQuotaReply("");
     }
   };
 
   // 🌸 Softer Sarathi color tones
-  const colors = {
+  const colors: Record<Status, string> = {
     idle: "bg-linear-to-br from-[#C9E4FF] via-[#F8F4FF] to-[#FFE6CC]",
     recording: "bg-linear-to-br from-[#FB7185] via-[#F2A766] to-[#FCD58A]",
     processing: "bg-linear-to-br from-[#FFE599] via-[#FCE8D8] to-[#F3D0FF]",
     speaking: "bg-linear-to-br from-[#60F1C1] via-[#38BDF8] to-[#A855F7]",
     error: "bg-linear-to-br from-[#3F425B] via-[#272846] to-[#0F172A]",
+    "quota-exceeded":
+      "bg-linear-to-br from-[#FEF3C7] via-[#FDE68A] to-[#FCD34D]",
+    "service-blocked":
+      "bg-linear-to-br from-[#E0E7FF] via-[#C7D2FE] to-[#A5B4FC]",
   };
 
   const persona = personaLabels[activeTone.value] || "warm companion";
@@ -473,6 +562,10 @@ export default function VoicePage() {
     processing: "Gathering guidance for you. One breath...",
     speaking: `Here comes your ${persona} with a grounded reply.`,
     error: "The connection slipped. Reset and try once more.",
+    "quota-exceeded":
+      "Voice API limit reached, but here's your reply in text 🙏",
+    "service-blocked":
+      "Voice API limit reached, but here's your reply in text 🙏",
   };
 
   const orbScaleMap: Record<Status, number[] | number> = {
@@ -481,6 +574,8 @@ export default function VoicePage() {
     processing: 1,
     speaking: [1, 1.08, 1],
     error: 1,
+    "quota-exceeded": [1, 1.03, 1],
+    "service-blocked": [1, 1.02, 1],
   };
 
   const orbScaleTransitions: Record<Status, Transition> = {
@@ -514,13 +609,65 @@ export default function VoicePage() {
       repeatType: "mirror",
       ease: "easeInOut",
     },
+    "quota-exceeded": {
+      duration: 2,
+      repeat: Infinity,
+      repeatType: "mirror",
+      ease: "easeInOut",
+    },
+    "service-blocked": {
+      duration: 2.5,
+      repeat: Infinity,
+      repeatType: "mirror",
+      ease: "easeInOut",
+    },
   };
+
+  // Icon for quota exceeded - a friendly sparkle
+  const IconSparkle = () => (
+    <svg
+      width="50"
+      height="50"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4" />
+    </svg>
+  );
+
+  // Icon for service blocked - a book/text icon
+  const IconText = () => (
+    <svg
+      width="50"
+      height="50"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      <line x1="8" y1="7" x2="16" y2="7" />
+      <line x1="8" y1="11" x2="16" y2="11" />
+      <line x1="8" y1="15" x2="12" y2="15" />
+    </svg>
+  );
 
   const orbIcon =
     status === "recording" || status === "speaking" ? (
       <IconStop />
     ) : status === "error" ? (
       <IconAlert />
+    ) : status === "quota-exceeded" ? (
+      <IconSparkle />
+    ) : status === "service-blocked" ? (
+      <IconText />
     ) : (
       <IconMic />
     );
@@ -842,10 +989,158 @@ export default function VoicePage() {
             {errorMessage}
           </motion.div>
         )}
+
+        {/* Beautiful Voice Quota Exceeded Card */}
+        {status === "quota-exceeded" && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            className="mt-6 w-full max-w-md"
+          >
+            {/* Main message card */}
+            <div className="relative overflow-hidden rounded-3xl border-4 border-amber-600/30 bg-linear-to-br from-amber-50 via-orange-50 to-yellow-50 p-6 shadow-[8px_8px_0_rgba(217,119,6,0.15)]">
+              {/* Decorative sparkles */}
+              <motion.div
+                className="absolute -right-2 -top-2 text-2xl"
+                animate={{ rotate: [0, 15, -15, 0], scale: [1, 1.1, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                ✨
+              </motion.div>
+              <motion.div
+                className="absolute -left-1 bottom-4 text-lg"
+                animate={{ rotate: [0, -10, 10, 0], scale: [1, 1.15, 1] }}
+                transition={{ duration: 2.5, repeat: Infinity, delay: 0.5 }}
+              >
+                🪷
+              </motion.div>
+
+              {/* Header */}
+              <div className="mb-4 flex items-center justify-center gap-2">
+                <span className="text-2xl">😔</span>
+                <h3 className="bg-linear-to-r from-amber-600 via-orange-500 to-yellow-600 bg-clip-text text-lg font-black uppercase tracking-wide text-transparent">
+                  API Limit Reached
+                </h3>
+                <span className="text-2xl">💫</span>
+              </div>
+
+              {/* Sweet message */}
+              <p className="mb-4 text-center text-sm font-medium text-amber-800/90">
+                Sorry! The voice API limit has been reached for now 🙏
+                <br />
+                But don&apos;t worry — here&apos;s your reply in text! 💝
+              </p>
+
+              {/* AI Reply Box */}
+              {quotaReply && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2, duration: 0.3 }}
+                  className="relative rounded-2xl border-2 border-amber-200 bg-white/80 p-4 shadow-inner"
+                >
+                  <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-amber-600/80">
+                    <span>🙏</span>
+                    <span>Sarathi says</span>
+                  </div>
+                  <p className="text-sm leading-relaxed text-slate-700">
+                    {quotaReply}
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Tap to continue hint */}
+              <motion.p
+                className="mt-4 text-center text-xs font-semibold text-amber-600/70"
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                Tap the orb to continue 🌸
+              </motion.p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Beautiful Service Blocked Card (401 - VPN/unusual activity) */}
+        {status === "service-blocked" && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            className="mt-6 w-full max-w-md"
+          >
+            {/* Main message card */}
+            <div className="relative overflow-hidden rounded-3xl border-4 border-indigo-400/40 bg-linear-to-br from-indigo-50 via-purple-50 to-blue-50 p-6 shadow-[8px_8px_0_rgba(99,102,241,0.15)]">
+              {/* Decorative elements */}
+              <motion.div
+                className="absolute -right-2 -top-2 text-2xl"
+                animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
+                transition={{ duration: 3, repeat: Infinity }}
+              >
+                🔮
+              </motion.div>
+              <motion.div
+                className="absolute -left-1 bottom-4 text-lg"
+                animate={{ y: [0, -3, 0], opacity: [0.7, 1, 0.7] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                📖
+              </motion.div>
+
+              {/* Header */}
+              <div className="mb-4 flex items-center justify-center gap-2">
+                <span className="text-2xl">😔</span>
+                <h3 className="bg-linear-to-r from-indigo-600 via-purple-500 to-blue-600 bg-clip-text text-lg font-black uppercase tracking-wide text-transparent">
+                  API Limit Reached
+                </h3>
+                <span className="text-2xl">✨</span>
+              </div>
+
+              {/* Sweet message */}
+              <p className="mb-4 text-center text-sm font-medium text-indigo-800/90">
+                Sorry! The voice API limit has been reached 🙏
+                <br />
+                <span className="text-xs text-indigo-600/70">
+                  But here&apos;s your reply in text! 💝
+                </span>
+              </p>
+
+              {/* AI Reply Box */}
+              {quotaReply && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2, duration: 0.3 }}
+                  className="relative rounded-2xl border-2 border-indigo-200 bg-white/80 p-4 shadow-inner"
+                >
+                  <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-indigo-600/80">
+                    <span>🙏</span>
+                    <span>Sarathi&apos;s written reply</span>
+                  </div>
+                  <p className="text-sm leading-relaxed text-slate-700">
+                    {quotaReply}
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Tap to continue hint */}
+              <motion.p
+                className="mt-4 text-center text-xs font-semibold text-indigo-600/70"
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                Tap the orb to continue 🪷
+              </motion.p>
+            </div>
+          </motion.div>
+        )}
       </main>
 
       <footer className="w-full py-4 text-center text-sm text-gray-600">
-        © 2025 Sarathi AI — Inspired by the Bhagavad Gita
+        © 2026 Sarathi AI — Inspired by the Bhagavad Gita
       </footer>
     </div>
   );
