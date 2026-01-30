@@ -11,6 +11,7 @@ It listens, understands, and speaks to you like a *calm friend* — helping you 
 
 💭 Whether you’re feeling anxious before a hackathon, stuck in confusion, or just need peace — **Sarathi** listens, reflects, and helps you find clarity.  
 
+
 ---
 
 ## 🎯 What Problem It Solves  
