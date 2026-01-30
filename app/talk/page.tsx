@@ -191,13 +191,13 @@ export default function VoicePage() {
 
   useEffect(() => {
     const labelMap: Record<Status, string> = {
-      idle: "🎙️ Tap to Speak",
-      recording: "🔴 Recording... Tap to Send",
-      processing: "✨ Sarathi is thinking...",
-      speaking: "🔊 Playing Reply...",
-      error: "❌ Oops!",
-      "quota-exceeded": "📝 Text Reply Ready",
-      "service-blocked": "📝 Text Reply Ready",
+      idle: "🎙️ Tap to Talk",
+      recording: "🔴 Talking... Tap to Send",
+      processing: "✨ Thinking...",
+      speaking: "🔊 Playing...",
+      error: "❌ Error!",
+      "quota-exceeded": "📝 Read Below",
+      "service-blocked": "📝 Read Below",
     };
     setStatusLabel(labelMap[status]);
   }, [status, activeTone.label]);
@@ -592,15 +592,13 @@ export default function VoicePage() {
 
   const persona = personaLabels[activeTone.value] || "warm companion";
   const statusDescriptions: Record<Status, string> = {
-    idle: `Step 1: Tap the orb above to start recording your message 🎤`,
-    recording: "Step 2: Share what's on your mind, then tap the orb to send ✨",
-    processing: "Almost there... Sarathi is preparing your guidance 🙏",
-    speaking: `Tap the orb to stop playback. Enjoy your ${persona}'s reply! 💫`,
-    error: "Something went wrong. Tap the orb to try again.",
-    "quota-exceeded":
-      "Voice is resting, but your reply is ready below! Read it 📖",
-    "service-blocked":
-      "Voice is resting, but your reply is ready below! Read it 📖",
+    idle: `Tap the circle to talk 🎤`,
+    recording: "Say something! Then tap again to send ✨",
+    processing: "Wait a moment... 🙏",
+    speaking: `Tap to stop. Listen to Sarathi! 💫`,
+    error: "Oops! Tap to try again.",
+    "quota-exceeded": "Read your reply below! 📖",
+    "service-blocked": "Read your reply below! 📖",
   };
 
   const orbScaleMap: Record<Status, number[] | number> = {
@@ -972,7 +970,7 @@ export default function VoicePage() {
                 animate={{ y: [0, -3, 0] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
               >
-                👆 Tap to start recording
+                👆 Tap here to talk
               </motion.div>
             )}
             {status === "recording" && (
@@ -981,7 +979,7 @@ export default function VoicePage() {
                 animate={{ scale: [1, 1.05, 1] }}
                 transition={{ duration: 0.8, repeat: Infinity }}
               >
-                🎤 Tap again to send your message
+                🎤 Tap to send
               </motion.div>
             )}
             {status === "processing" && (
@@ -990,7 +988,7 @@ export default function VoicePage() {
                 animate={{ opacity: [0.7, 1, 0.7] }}
                 transition={{ duration: 1, repeat: Infinity }}
               >
-                ⏳ Please wait...
+                ⏳ Wait...
               </motion.div>
             )}
             {status === "speaking" && (
@@ -999,12 +997,12 @@ export default function VoicePage() {
                 animate={{ scale: [1, 1.03, 1] }}
                 transition={{ duration: 1.2, repeat: Infinity }}
               >
-                🔊 Playing • Tap to stop
+                🔊 Tap to stop
               </motion.div>
             )}
             {status === "error" && (
               <motion.div className="rounded-full bg-slate-700 px-4 py-1.5 text-xs font-bold text-white shadow-lg">
-                🔄 Tap to try again
+                🔄 Try again
               </motion.div>
             )}
             {(status === "quota-exceeded" || status === "service-blocked") && (
@@ -1013,7 +1011,7 @@ export default function VoicePage() {
                 animate={{ y: [0, -2, 0] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
-                📖 Read below • Tap orb to continue
+                📖 Read below
               </motion.div>
             )}
           </motion.div>
