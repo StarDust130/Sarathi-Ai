@@ -191,13 +191,13 @@ export default function VoicePage() {
 
   useEffect(() => {
     const labelMap: Record<Status, string> = {
-      idle: "Tap to Speak",
-      recording: "Listening... (Tap to stop)",
-      processing: "Thinking...",
-      speaking: `Speaking as ${activeTone.label}`,
-      error: "Error",
-      "quota-exceeded": "API Limit Reached 😔",
-      "service-blocked": "API Limit Reached 😔",
+      idle: "🎙️ Tap to Speak",
+      recording: "🔴 Recording... Tap to Send",
+      processing: "✨ Sarathi is thinking...",
+      speaking: "🔊 Playing Reply...",
+      error: "❌ Oops!",
+      "quota-exceeded": "📝 Text Reply Ready",
+      "service-blocked": "📝 Text Reply Ready",
     };
     setStatusLabel(labelMap[status]);
   }, [status, activeTone.label]);
@@ -474,6 +474,41 @@ export default function VoicePage() {
         return;
       }
 
+      // Handle voice generation failed (502 - TTS service error)
+      if (res.status === 502 && result?.code === "VOICE_GENERATION_FAILED") {
+        const textReply = typeof result?.reply === "string" ? result.reply : "";
+        const resolvedTranscript =
+          typeof result?.transcript === "string"
+            ? result.transcript.trim()
+            : "";
+
+        if (textReply) {
+          setQuotaReply(textReply);
+          if (resolvedTranscript && textReply) {
+            const turn: ConversationTurn = {
+              id: `turn-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 6)}`,
+              user: resolvedTranscript,
+              assistant: textReply,
+              timestamp: Date.now(),
+              tone: activeTone.value,
+              language:
+                result?.language === "hindi"
+                  ? "hindi"
+                  : result?.language === "hinglish" ||
+                      result?.language === "english"
+                    ? "hinglish"
+                    : "unknown",
+            };
+            setHistory((prev) => {
+              const next = [...prev, turn];
+              return next.slice(-MAX_HISTORY_TURNS);
+            });
+          }
+        }
+        setStatus("service-blocked");
+        return;
+      }
+
       if (!res.ok) {
         const apiMessage =
           typeof result?.error === "string" ? result.error : null;
@@ -557,15 +592,15 @@ export default function VoicePage() {
 
   const persona = personaLabels[activeTone.value] || "warm companion";
   const statusDescriptions: Record<Status, string> = {
-    idle: `Choose your vibe, then tap to speak with your ${persona}.`,
-    recording: "Share what's on your mind - I'm listening closely.",
-    processing: "Gathering guidance for you. One breath...",
-    speaking: `Here comes your ${persona} with a grounded reply.`,
-    error: "The connection slipped. Reset and try once more.",
+    idle: `Step 1: Tap the orb above to start recording your message 🎤`,
+    recording: "Step 2: Share what's on your mind, then tap the orb to send ✨",
+    processing: "Almost there... Sarathi is preparing your guidance 🙏",
+    speaking: `Tap the orb to stop playback. Enjoy your ${persona}'s reply! 💫`,
+    error: "Something went wrong. Tap the orb to try again.",
     "quota-exceeded":
-      "Voice API limit reached, but here's your reply in text 🙏",
+      "Voice is resting, but your reply is ready below! Read it 📖",
     "service-blocked":
-      "Voice API limit reached, but here's your reply in text 🙏",
+      "Voice is resting, but your reply is ready below! Read it 📖",
   };
 
   const orbScaleMap: Record<Status, number[] | number> = {
@@ -920,6 +955,69 @@ export default function VoicePage() {
             </>
           )}
         </motion.div>
+
+        {/* Action Hint Badge - shows what tapping will do */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`hint-${status}`}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.25 }}
+            className="flex items-center justify-center"
+          >
+            {status === "idle" && (
+              <motion.div
+                className="rounded-full bg-slate-900 px-4 py-1.5 text-xs font-bold text-white shadow-lg"
+                animate={{ y: [0, -3, 0] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              >
+                👆 Tap to start recording
+              </motion.div>
+            )}
+            {status === "recording" && (
+              <motion.div
+                className="rounded-full bg-rose-500 px-4 py-1.5 text-xs font-bold text-white shadow-lg"
+                animate={{ scale: [1, 1.05, 1] }}
+                transition={{ duration: 0.8, repeat: Infinity }}
+              >
+                🎤 Tap again to send your message
+              </motion.div>
+            )}
+            {status === "processing" && (
+              <motion.div
+                className="rounded-full bg-amber-500 px-4 py-1.5 text-xs font-bold text-white shadow-lg"
+                animate={{ opacity: [0.7, 1, 0.7] }}
+                transition={{ duration: 1, repeat: Infinity }}
+              >
+                ⏳ Please wait...
+              </motion.div>
+            )}
+            {status === "speaking" && (
+              <motion.div
+                className="rounded-full bg-emerald-500 px-4 py-1.5 text-xs font-bold text-white shadow-lg"
+                animate={{ scale: [1, 1.03, 1] }}
+                transition={{ duration: 1.2, repeat: Infinity }}
+              >
+                🔊 Playing • Tap to stop
+              </motion.div>
+            )}
+            {status === "error" && (
+              <motion.div className="rounded-full bg-slate-700 px-4 py-1.5 text-xs font-bold text-white shadow-lg">
+                🔄 Tap to try again
+              </motion.div>
+            )}
+            {(status === "quota-exceeded" || status === "service-blocked") && (
+              <motion.div
+                className="rounded-full bg-indigo-500 px-4 py-1.5 text-xs font-bold text-white shadow-lg"
+                animate={{ y: [0, -2, 0] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                📖 Read below • Tap orb to continue
+              </motion.div>
+            )}
+          </motion.div>
+        </AnimatePresence>
 
         <AnimatePresence mode="wait">
           <motion.h2

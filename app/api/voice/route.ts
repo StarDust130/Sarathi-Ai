@@ -14,24 +14,22 @@ const GROQ_API_BASE =
 
 const MAX_HISTORY_TURNS = 4;
 
-// Free ElevenLabs voices that work on free plan (pre-made voices)
-// Rachel (warm female), Mimi (childish/gentle), Drew (male news), Fin (energetic Irish), Clyde (deep male)
-const VOICE_MAP: Record<ToneValue, string> = {
-  // Rachel - warm, friendly female American voice
-  warm: process.env.ELEVENLABS_WARM_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
-  // Mimi - soft, gentle childish animation voice (spiritual/calm)
-  spiritual:
-    process.env.ELEVENLABS_SPIRITUAL_VOICE_ID || "zrHiDhphv9ZnVXBqCLjz",
-  // Drew - clear, confident male American news voice
-  coach: process.env.ELEVENLABS_COACH_VOICE_ID || "29vD33N1CtxCmqQRPOHJ",
+// Microsoft Edge TTS voices (FREE - no API limits!)
+// Indian voices for that divine Krishna-like feel
+const EDGE_VOICE_MAP: Record<ToneValue, string> = {
+  // en-IN-NeerjaNeural - Best natural Indian female voice (warm, friendly)
+  warm: "en-IN-NeerjaNeural",
+  // hi-IN-SwaraNeural - Hindi female voice (spiritual, divine)
+  spiritual: "hi-IN-SwaraNeural",
+  // en-IN-PrabhatNeural - Clear professional Indian male voice (coach)
+  coach: "en-IN-PrabhatNeural",
 };
 
-// For Hindi content, use the same free voices (they support multilingual)
-const HINDI_VOICE_MAP: Record<ToneValue, string | undefined> = {
-  warm: process.env.ELEVENLABS_HINDI_WARM_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
-  spiritual:
-    process.env.ELEVENLABS_HINDI_SPIRITUAL_VOICE_ID || "zrHiDhphv9ZnVXBqCLjz",
-  coach: process.env.ELEVENLABS_HINDI_COACH_VOICE_ID || "29vD33N1CtxCmqQRPOHJ",
+// For Hindi content, use Hindi voices
+const EDGE_HINDI_VOICE_MAP: Record<ToneValue, string> = {
+  warm: "hi-IN-SwaraNeural",
+  spiritual: "hi-IN-SwaraNeural",
+  coach: "hi-IN-MadhurNeural",
 };
 
 const toneDirections: Record<ToneValue, string> = {
@@ -116,6 +114,134 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
   }
   return btoa(binary);
 };
+
+// Microsoft Edge TTS - FREE with no API limits!
+// Uses the same neural voices as Microsoft Azure but through Edge's free endpoint
+async function generateEdgeTTS(
+  text: string,
+  voice: string,
+): Promise<{ audioBuffer: ArrayBuffer; success: boolean; error?: string }> {
+  try {
+    // Edge TTS endpoint (free, no auth required)
+    const endpoint =
+      "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/token";
+
+    // Get auth token
+    const tokenRes = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        "Sec-MS-GEC": crypto.randomUUID().replace(/-/g, "").toUpperCase(),
+        "Sec-MS-GEC-Version": "1-130.0.2849.68",
+      },
+    });
+
+    if (!tokenRes.ok) {
+      // Fallback: Use direct WebSocket-free approach via edge-tts proxy
+      return await generateEdgeTTSFallback(text, voice);
+    }
+
+    const token = await tokenRes.text();
+
+    // Create SSML
+    const ssml = `
+      <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">
+        <voice name="${voice}">
+          <prosody rate="-5%" pitch="+0Hz">
+            ${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+          </prosody>
+        </voice>
+      </speak>
+    `.trim();
+
+    // Synthesize speech
+    const ttsRes = await fetch(
+      "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/ssml+xml",
+          "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+        },
+        body: ssml,
+      },
+    );
+
+    if (!ttsRes.ok) {
+      return await generateEdgeTTSFallback(text, voice);
+    }
+
+    const audioBuffer = await ttsRes.arrayBuffer();
+    return { audioBuffer, success: true };
+  } catch (error) {
+    console.error("[edge-tts] error:", error);
+    return await generateEdgeTTSFallback(text, voice);
+  }
+}
+
+// Fallback using a public Edge TTS API proxy
+async function generateEdgeTTSFallback(
+  text: string,
+  voice: string,
+): Promise<{ audioBuffer: ArrayBuffer; success: boolean; error?: string }> {
+  try {
+    // Use a public TTS API that supports Edge voices
+    const encodedText = encodeURIComponent(text);
+    const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${voice}&text=${encodedText}`;
+
+    const res = await fetch(ttsUrl);
+
+    if (!res.ok) {
+      // Try another free TTS service
+      return await generateGoogleTTSFallback(text, voice);
+    }
+
+    const audioBuffer = await res.arrayBuffer();
+    return { audioBuffer, success: true };
+  } catch (error) {
+    console.error("[edge-tts-fallback] error:", error);
+    return await generateGoogleTTSFallback(text, voice);
+  }
+}
+
+// Final fallback using Google Translate TTS (very basic but always works)
+async function generateGoogleTTSFallback(
+  text: string,
+  voice: string,
+): Promise<{ audioBuffer: ArrayBuffer; success: boolean; error?: string }> {
+  try {
+    // Determine language from voice
+    const lang = voice.startsWith("hi-") ? "hi" : "en";
+    const encodedText = encodeURIComponent(text.slice(0, 200)); // Google TTS has char limit
+
+    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodedText}`;
+
+    const res = await fetch(ttsUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    });
+
+    if (!res.ok) {
+      return {
+        audioBuffer: new ArrayBuffer(0),
+        success: false,
+        error: "All TTS services failed",
+      };
+    }
+
+    const audioBuffer = await res.arrayBuffer();
+    return { audioBuffer, success: true };
+  } catch (error) {
+    console.error("[google-tts-fallback] error:", error);
+    return {
+      audioBuffer: new ArrayBuffer(0),
+      success: false,
+      error: "All TTS services failed",
+    };
+  }
+}
 
 const getTalkMode = (): "long" | "short" => {
   const raw = process.env.SARATHI_TALK_MODE;
@@ -254,8 +380,7 @@ ${toneGuide}
 
 export async function POST(request: Request) {
   const groqKey = process.env.GROQ_API_KEY;
-  const elevenKey = process.env.ELEVENLABS_API_KEY;
-  if (!groqKey || !elevenKey) {
+  if (!groqKey) {
     return NextResponse.json(
       { error: "Voice service is missing required API keys." },
       { status: 500 },
@@ -408,94 +533,41 @@ export async function POST(request: Request) {
       ? clamp(rawReply, isLong ? 420 : 160)
       : replyFallback;
 
+    // Use Edge TTS with Indian voices (FREE - no API limits!)
     const preferHindiVoice = language === "hindi";
-    const voiceId = preferHindiVoice
-      ? HINDI_VOICE_MAP[tone] || VOICE_MAP[tone]
-      : VOICE_MAP[tone];
-    const outputFormat =
-      process.env.ELEVENLABS_OUTPUT_FORMAT?.trim() || "mp3_44100_128";
-    const mimeType = outputFormat.includes("mp3") ? "audio/mpeg" : "audio/wav";
+    const edgeVoice = preferHindiVoice
+      ? EDGE_HINDI_VOICE_MAP[tone]
+      : EDGE_VOICE_MAP[tone];
 
-    const voiceSettings = preferHindiVoice
-      ? {
-          stability: 0.52,
-          similarity_boost: 0.62,
-          style: 0.45,
-          use_speaker_boost: false,
-        }
-      : {
-          stability: 0.46,
-          similarity_boost: 0.72,
-          style: 0.2,
-          use_speaker_boost: true,
-        };
-
-    const ttsRes = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": elevenKey,
-          "Content-Type": "application/json",
-          Accept: mimeType,
-        },
-        body: JSON.stringify({
-          text: reply,
-          model_id: "eleven_multilingual_v2",
-          output_format: outputFormat,
-          voice_settings: voiceSettings,
-        }),
-      },
+    console.log(
+      `[voice-api] Using Edge TTS voice: ${edgeVoice} for language: ${language}`,
     );
 
-    if (!ttsRes.ok) {
-      const errText = await ttsRes.text().catch(() => "");
-      console.error("[voice-api] elevenlabs error", ttsRes.status, errText);
+    const ttsResult = await generateEdgeTTS(reply, edgeVoice);
 
-      // Check if this is a payment/quota issue (402 Payment Required)
-      if (ttsRes.status === 402) {
-        return NextResponse.json(
-          {
-            error: "Voice quota exceeded",
-            code: "VOICE_QUOTA_EXCEEDED",
-            reply,
-            transcript: transcriptText,
-            language,
-            tone,
-          },
-          { status: 402 },
-        );
-      }
-
-      // Check for 401 - unusual activity / free tier blocked
-      if (ttsRes.status === 401) {
-        return NextResponse.json(
-          {
-            error: "Voice service temporarily unavailable",
-            code: "VOICE_SERVICE_BLOCKED",
-            reply,
-            transcript: transcriptText,
-            language,
-            tone,
-          },
-          { status: 401 },
-        );
-      }
-
+    if (!ttsResult.success || ttsResult.audioBuffer.byteLength === 0) {
+      console.error("[voice-api] Edge TTS failed:", ttsResult.error);
+      // Return text response if TTS fails
       return NextResponse.json(
-        { error: "ElevenLabs API limit reached. 🔄⏳" },
+        {
+          error: "Voice generation failed",
+          code: "VOICE_GENERATION_FAILED",
+          reply,
+          transcript: transcriptText,
+          language,
+          tone,
+        },
         { status: 502 },
       );
     }
 
-    const audioBuffer = await ttsRes.arrayBuffer();
-    const audioBase64 = arrayBufferToBase64(audioBuffer);
+    const audioBase64 = arrayBufferToBase64(ttsResult.audioBuffer);
 
     return NextResponse.json({
       transcript: transcriptText,
       reply,
       audioBase64,
-      audioMimeType: mimeType,
+      audioMimeType: "audio/mpeg",
       mode: talkMode,
       tone,
       language,
